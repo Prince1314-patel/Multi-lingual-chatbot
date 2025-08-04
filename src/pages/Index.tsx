@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { MessageCircle, Users, Zap } from "lucide-react";
+import { MessageCircle, Users, Zap, Copy, Check } from "lucide-react";
 
 const Index = () => {
   const [roomId, setRoomId] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const generateRoomId = () => {
     const id = Math.random().toString(36).substring(2, 15);
@@ -16,6 +17,13 @@ const Index = () => {
     if (roomId.trim()) {
       window.location.href = `/chat/${roomId.trim()}`;
     }
+  };
+
+  const copyRoomLink = async () => {
+    const link = `${window.location.origin}/chat/${roomId}`;
+    await navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -58,6 +66,27 @@ const Index = () => {
                     Join Chat
                   </Button>
                 </div>
+                
+                {roomId && (
+                  <div className="mt-4 p-3 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-2">Share this link with others:</p>
+                    <div className="flex gap-2">
+                      <Input 
+                        value={`${window.location.origin}/chat/${roomId}`} 
+                        readOnly 
+                        className="text-sm"
+                      />
+                      <Button 
+                        onClick={copyRoomLink} 
+                        variant="outline" 
+                        size="sm"
+                        className="shrink-0"
+                      >
+                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

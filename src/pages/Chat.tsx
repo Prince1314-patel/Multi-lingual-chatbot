@@ -1,12 +1,17 @@
-import { useParams, useSearchParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const Chat = () => {
   const { roomId } = useParams<{ roomId: string }>();
-  const [searchParams] = useSearchParams();
-  const [currentUser, setCurrentUser] = useState(searchParams.get('user') || 'userA');
+  const [currentUser, setCurrentUser] = useState("");
+
+  useEffect(() => {
+    // Generate a unique user ID for this session
+    const userId = `user-${Math.random().toString(36).substring(2, 9)}`;
+    setCurrentUser(userId);
+  }, []);
   
   if (!roomId) {
     return (
@@ -22,34 +27,16 @@ const Chat = () => {
     );
   }
 
-  const otherUser = currentUser === 'userA' ? 'userB' : 'userA';
+  if (!currentUser) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <div className="h-screen">
-      {/* User toggle for testing */}
-      <div className="absolute top-4 left-4 z-10 bg-background border rounded-lg p-2 shadow-lg">
-        <div className="flex gap-2">
-          <Button
-            variant={currentUser === 'userA' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCurrentUser('userA')}
-          >
-            User A
-          </Button>
-          <Button
-            variant={currentUser === 'userB' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCurrentUser('userB')}
-          >
-            User B
-          </Button>
-        </div>
-      </div>
-
       <ChatWindow
         roomId={roomId}
         currentUser={currentUser}
-        otherUser={otherUser}
+        otherUser="other-users"
       />
     </div>
   );
