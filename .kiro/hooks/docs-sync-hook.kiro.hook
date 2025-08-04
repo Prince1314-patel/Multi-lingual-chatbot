@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "name": "Documentation Sync",
+  "description": "Listens to TypeScript source files and configuration changes in the front-end project and automatically updates documentation in README or reference-docs folder",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "front-end/src/**/*.tsx",
+      "front-end/src/**/*.ts",
+      "front-end/src/**/*.css",
+      "front-end/*.json",
+      "front-end/*.config.*",
+      "front-end/tsconfig*.json"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Source code files have been modified in the front-end project. Please review the changes and update the documentation accordingly. Update the front-end/README.md file and/or relevant files in the reference-docs folder to reflect any new features, components, configuration changes, or architectural updates. Focus on keeping the documentation accurate and helpful for developers working on this TypeScript React project."
+  }
+}

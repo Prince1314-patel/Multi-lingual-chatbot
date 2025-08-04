@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "name": "Auto Test Generation",
+  "description": "Automatically generates unit tests, functionality tests, and integration tests when new functionality is added to the codebase",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "front-end/src/components/**/*.tsx",
+      "front-end/src/hooks/**/*.tsx",
+      "front-end/src/hooks/**/*.ts",
+      "front-end/src/lib/**/*.ts",
+      "front-end/src/pages/**/*.tsx"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "New functionality has been added to the codebase. Please analyze the changes and create comprehensive test cases including:\n\n1. Unit tests - Test individual functions, components, and methods in isolation\n2. Functionality tests - Test the feature's behavior and user interactions\n3. Integration tests - Test how the new functionality integrates with existing components and systems\n\nFor each test type, provide:\n- Test file structure and naming conventions\n- Specific test cases covering edge cases, error handling, and expected behavior\n- Mock data and setup requirements\n- Assertions to validate functionality\n\nFocus on the modified files and ensure the tests cover all new code paths, user interactions, and potential failure scenarios."
+  }
+}

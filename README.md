@@ -1,73 +1,222 @@
-# Welcome to your Lovable project
+# AI-Powered Multilingual Voice & Text Communication Agent
 
-## Project info
+A Progressive Web Application (PWA) that enables real-time multilingual communication through shareable chat room links. Users can exchange text and voice messages with automatic transcription, translation, and speech synthesis - no authentication required.
 
-**URL**: https://lovable.dev/projects/b30fd4bb-fe49-4596-8262-84d4410f7d15
+## 🚀 Features
 
-## How can I edit this code?
+- **Room-based Chat**: Unique, shareable links for instant room access
+- **Real-time Messaging**: WebSocket-powered text and voice communication
+- **AI-powered Translation**: Groq Llama-3.3-70B-Versatile for multilingual text translation
+- **Voice Processing**: OpenAI Whisper (ASR), Coqui TTS, and Chatterbox TTS for voice cloning
+- **Dual-language Display**: Original and translated messages shown side-by-side
+- **Progressive Web App**: Mobile-responsive, installable, offline-capable
 
-There are several ways of editing your application.
+## 🏗️ Architecture
 
-**Use Lovable**
+### Frontend
+- **React 18** with TypeScript and functional components
+- **Vite** for fast builds and hot reload
+- **Tailwind CSS** with shadcn/ui component library
+- **WebSocket** for real-time communication
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/b30fd4bb-fe49-4596-8262-84d4410f7d15) and start prompting.
+### Backend (Planned)
+- **FastAPI** (Python) with async/await
+- **WebSocket** rooms for real-time messaging
+- **AI Services**: Groq, OpenAI Whisper, Coqui TTS, Chatterbox TTS
+- **Database**: MongoDB (messages), AWS S3 (audio files), Redis (scaling)
 
-Changes made via Lovable will be committed automatically to this repo.
+## 📁 Project Structure
 
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+├── front-end/                 # React frontend application
+├── backend/                   # FastAPI backend (planned)
+├── reference-docs/            # Project documentation and specifications
+└── .kiro/                     # Kiro AI assistant configuration
 ```
 
-**Edit a file directly in GitHub**
+## 🛠️ Development Setup
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Prerequisites
 
-**Use GitHub Codespaces**
+- **Node.js** (v18 or higher)
+- **Python** (v3.9 or higher)
+- **npm** or **yarn**
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Frontend Setup
 
-## What technologies are used for this project?
+1. Navigate to the frontend directory:
+   ```bash
+   cd front-end
+   ```
 
-This project is built with:
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
-## How can I deploy this project?
+4. Open your browser to `http://localhost:8080`
 
-Simply open [Lovable](https://lovable.dev/projects/b30fd4bb-fe49-4596-8262-84d4410f7d15) and click on Share -> Publish.
+### Backend Setup (When Available)
 
-## Can I connect a custom domain to my Lovable project?
+1. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
 
-Yes, you can!
+2. Create a virtual environment:
+   ```bash
+   python -m venv venv
+   ```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+3. Activate the virtual environment:
+   ```bash
+   # On Windows
+   venv\Scripts\activate
+   
+   # On macOS/Linux
+   source venv/bin/activate
+   ```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+4. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+5. Set up environment variables:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys and configuration
+   ```
+
+6. Start the FastAPI server:
+   ```bash
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+
+## 🔧 Available Scripts
+
+### Frontend Commands
+
+```bash
+npm run dev          # Start development server
+npm run build        # Production build
+npm run build:dev    # Development build
+npm run lint         # Run ESLint
+npm run preview      # Preview production build
+```
+
+### Backend Commands (Planned)
+
+```bash
+python -m uvicorn app.main:app --reload    # Start development server
+python -m pytest                          # Run tests
+python -m pytest --cov                    # Run tests with coverage
+```
+
+## 🌐 Environment Variables
+
+### Backend Environment Variables
+
+Create a `.env` file in the `backend/` directory:
+
+```env
+# API Keys
+GROQ_API_KEY=your_groq_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Database Configuration
+MONGODB_URL=mongodb://localhost:27017/multilingual_chat
+REDIS_URL=redis://localhost:6379
+
+# AWS Configuration (for S3 audio storage)
+AWS_ACCESS_KEY_ID=your_aws_access_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+AWS_S3_BUCKET=your_s3_bucket_name
+AWS_REGION=us-east-1
+
+# TTS Configuration
+COQUI_TTS_URL=http://localhost:5002
+CHATTERBOX_TTS_URL=http://localhost:5003
+
+# Application Settings
+DEBUG=true
+LOG_LEVEL=INFO
+CORS_ORIGINS=http://localhost:8080,http://localhost:3000
+```
+
+## 🧪 Testing
+
+### Frontend Testing
+```bash
+cd front-end
+npm run test        # Run Jest tests (when implemented)
+npm run test:watch  # Run tests in watch mode
+```
+
+### Backend Testing
+```bash
+cd backend
+python -m pytest                    # Run all tests
+python -m pytest tests/unit/        # Run unit tests only
+python -m pytest tests/integration/ # Run integration tests only
+python -m pytest --cov              # Run with coverage report
+```
+
+## 📋 Development Phases
+
+### ✅ Phase 1: Core Chat with WebSocket & Room Links
+- [x] React frontend with chat UI
+- [x] WebSocket connection management
+- [ ] FastAPI backend with room-based WebSocket routing
+- [ ] Text and voice message transmission
+
+### 🔄 Phase 2: Text Translation with Groq LLM
+- [ ] Groq API integration for text translation
+- [ ] Dual-language message display
+- [ ] Language selector UI
+
+### 📅 Phase 3: Voice Transcription, Translation & Synthesis
+- [ ] OpenAI Whisper integration (ASR)
+- [ ] Coqui TTS integration
+- [ ] Chatterbox TTS for voice cloning
+- [ ] Voice message processing pipeline
+
+### 📅 Phase 4: Persistence, Scalability & History
+- [ ] MongoDB integration
+- [ ] AWS S3 for audio storage
+- [ ] Redis for scaling
+- [ ] Chat history retrieval
+
+### 📅 Phase 5: Observability & Admin Features
+- [ ] Prometheus metrics
+- [ ] Admin dashboard
+- [ ] Role-based access control
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -m 'Add amazing feature'`
+4. Push to the branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🔗 Documentation
+
+- [Product Requirements Document](reference-docs/prd.md)
+- [Implementation Plan](reference-docs/Implementation_plan.md)
+- [Backend Structure Guidelines](reference-docs/backend_structure.md)
+- [Frontend Guidelines](reference-docs/frontend_guidelines.md)
+- [Current To-Do List](reference-docs/to-do.md)
+
+## 🆘 Support
+
+For questions and support, please refer to the documentation in the `reference-docs/` directory or open an issue in the repository.
