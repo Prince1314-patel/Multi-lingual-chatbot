@@ -61,7 +61,21 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
-				}
+				},
+				chat: {
+					background: 'hsl(var(--chat-background))',
+					sidebar: 'hsl(var(--chat-sidebar))',
+				},
+				message: {
+					user: 'hsl(var(--message-user))',
+					'user-foreground': 'hsl(var(--message-user-foreground))',
+					other: 'hsl(var(--message-other))',
+					'other-foreground': 'hsl(var(--message-other-foreground))',
+					timestamp: 'hsl(var(--message-timestamp))',
+					sending: 'hsl(var(--message-sending))',
+					sent: 'hsl(var(--message-sent))',
+				},
+				typing: 'hsl(var(--typing-indicator))'
 			},
 			borderRadius: {
 				lg: 'var(--radius)',
