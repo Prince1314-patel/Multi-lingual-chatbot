@@ -6,6 +6,7 @@ from fastapi import WebSocket
 
 from .connection_manager import ConnectionManager
 from .room_manager import RoomManager
+from .rate_limiter import RateLimiter
 from ..models import (
     MessageType,
     TextMessage,
@@ -25,16 +26,19 @@ logger = logging.getLogger(__name__)
 class MessageHandler:
     """Handles processing and routing of different message types"""
     
-    def __init__(self, connection_manager: ConnectionManager, room_manager: RoomManager):
+    def __init__(self, connection_manager: ConnectionManager, room_manager: RoomManager, 
+                 rate_limiter: Optional[RateLimiter] = None):
         """
         Initialize MessageHandler
         
         Args:
             connection_manager: ConnectionManager instance for handling connections
             room_manager: RoomManager instance for room operations
+            rate_limiter: Optional RateLimiter instance for message rate limiting
         """
         self.connection_manager = connection_manager
         self.room_manager = room_manager
+        self.rate_limiter = rate_limiter
         self.typing_timeouts: Dict[str, Dict[str, asyncio.Task]] = {}  # room_id -> user_id -> timeout_task
     
     async def handle_message(self, websocket: WebSocket, message_data: dict) -> bool:
@@ -156,7 +160,7 @@ class MessageHandler:
     
     async def handle_text_message(self, connection, message: TextMessage) -> bool:
         """
-        Handle text message processing and broadcasting
+        Handle text message processing and broadcasting with rate limiting
         
         Args:
             connection: ConnectionInfo object
@@ -166,6 +170,18 @@ class MessageHandler:
             True if message was handled successfully
         """
         try:
+            # Check rate limit if rate limiter is available
+            if self.rate_limiter:
+                allowed, wait_time = self.rate_limiter.check_message_rate_limit(
+                    connection.user_id, 'text'
+                )
+                if not allowed:
+                    await self.connection_manager.send_error(
+                        connection.websocket, "RATE_LIMIT_EXCEEDED", 
+                        f"Text message rate limit exceeded. Wait {wait_time:.1f} seconds."
+                    )
+                    return False
+            
             # Update connection activity
             connection.update_activity()
             
@@ -194,7 +210,7 @@ class MessageHandler:
     
     async def handle_voice_message(self, connection, message: VoiceMessage) -> bool:
         """
-        Handle voice message processing and broadcasting
+        Handle voice message processing and broadcasting with rate limiting
         
         Args:
             connection: ConnectionInfo object
@@ -204,6 +220,18 @@ class MessageHandler:
             True if message was handled successfully
         """
         try:
+            # Check rate limit if rate limiter is available
+            if self.rate_limiter:
+                allowed, wait_time = self.rate_limiter.check_message_rate_limit(
+                    connection.user_id, 'voice'
+                )
+                if not allowed:
+                    await self.connection_manager.send_error(
+                        connection.websocket, "RATE_LIMIT_EXCEEDED", 
+                        f"Voice message rate limit exceeded. Wait {wait_time:.1f} seconds."
+                    )
+                    return False
+            
             # Update connection activity
             connection.update_activity()
             
@@ -247,7 +275,7 @@ class MessageHandler:
     
     async def handle_typing_message(self, connection, message: TypingMessage) -> bool:
         """
-        Handle typing indicator message processing
+        Handle typing indicator message processing with rate limiting
         
         Args:
             connection: ConnectionInfo object
@@ -257,6 +285,17 @@ class MessageHandler:
             True if message was handled successfully
         """
         try:
+            # Check rate limit if rate limiter is available
+            if self.rate_limiter:
+                allowed, wait_time = self.rate_limiter.check_message_rate_limit(
+                    connection.user_id, 'typing'
+                )
+                if not allowed:
+                    # For typing messages, we silently drop them instead of sending error
+                    # to avoid spamming the user with rate limit errors
+                    logger.debug(f"Typing message rate limited for user {connection.user_id}")
+                    return False
+            
             # Update connection activity
             connection.update_activity()
             

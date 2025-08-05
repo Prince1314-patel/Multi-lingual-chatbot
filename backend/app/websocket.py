@@ -2,10 +2,12 @@ import json
 import logging
 import time
 from typing import Optional
-from fastapi import WebSocket, WebSocketDisconnect, HTTPException, Depends
+from fastapi import WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
 from fastapi.routing import APIRouter
 
 from .services import ConnectionManager, RoomManager, MessageHandler
+from .services.rate_limiter import RateLimiter, RateLimitConfig
+from .services.memory_optimizer import MemoryOptimizer
 from .models import validate_room_id, generate_user_id
 from .core import ErrorHandler, ErrorCode, ChatLogger, get_error_handler, get_chat_logger
 
@@ -18,15 +20,37 @@ websocket_router = APIRouter()
 connection_manager: Optional[ConnectionManager] = None
 room_manager: Optional[RoomManager] = None
 message_handler: Optional[MessageHandler] = None
+rate_limiter: Optional[RateLimiter] = None
+memory_optimizer: Optional[MemoryOptimizer] = None
 
 
 def init_websocket_services():
     """Initialize WebSocket services - called from main.py"""
-    global connection_manager, room_manager, message_handler
+    global connection_manager, room_manager, message_handler, rate_limiter, memory_optimizer
     
-    connection_manager = ConnectionManager()
+    # Initialize rate limiter with configuration
+    rate_limit_config = RateLimitConfig(
+        text_messages_per_minute=60,
+        voice_messages_per_minute=10,
+        typing_messages_per_minute=120,
+        max_connections_per_room=50,
+        max_connections_per_ip=10
+    )
+    rate_limiter = RateLimiter(rate_limit_config)
+    
+    # Initialize services with rate limiter
+    connection_manager = ConnectionManager(rate_limiter)
     room_manager = RoomManager(cleanup_timeout_minutes=30)
-    message_handler = MessageHandler(connection_manager, room_manager)
+    message_handler = MessageHandler(connection_manager, room_manager, rate_limiter)
+    
+    # Initialize memory optimizer
+    memory_optimizer = MemoryOptimizer()
+    memory_optimizer.register_services(
+        connection_manager=connection_manager,
+        room_manager=room_manager,
+        message_handler=message_handler,
+        rate_limiter=rate_limiter
+    )
     
     logger.log_message_event("services_initialized", None, None, "system")
 
@@ -38,6 +62,35 @@ def get_services():
     
     return connection_manager, room_manager, message_handler
 
+def get_all_services():
+    """Get all services including performance optimization services"""
+    if not all([connection_manager, room_manager, message_handler, rate_limiter, memory_optimizer]):
+        raise HTTPException(status_code=500, detail="WebSocket services not initialized")
+    
+    return connection_manager, room_manager, message_handler, rate_limiter, memory_optimizer
+
+
+def get_client_ip(websocket: WebSocket) -> Optional[str]:
+    """Extract client IP address from WebSocket connection"""
+    try:
+        # Try to get real IP from headers (for proxy setups)
+        if hasattr(websocket, 'headers'):
+            forwarded_for = websocket.headers.get('x-forwarded-for')
+            if forwarded_for:
+                return forwarded_for.split(',')[0].strip()
+            
+            real_ip = websocket.headers.get('x-real-ip')
+            if real_ip:
+                return real_ip.strip()
+        
+        # Fallback to client address
+        if hasattr(websocket, 'client') and websocket.client:
+            return websocket.client.host
+        
+        return None
+    except Exception as e:
+        logger.error(f"Error extracting client IP: {e}")
+        return None
 
 @websocket_router.websocket("/ws/chat/{room_id}")
 async def websocket_chat_endpoint(
@@ -85,15 +138,26 @@ async def websocket_chat_endpoint(
     if not user_id:
         user_id = generate_user_id()
     
+    # Get client IP for rate limiting
+    client_ip = get_client_ip(websocket)
+    
     connection = None
     
     try:
         # Accept WebSocket connection and join room with timeout handling
         try:
-            connection = await conn_mgr.connect(websocket, room_id, user_id)
+            connection = await conn_mgr.connect(websocket, room_id, user_id, client_ip)
             logger.log_connection_event("established", user_id, room_id, {
-                "connection_time_ms": (time.time() - start_time) * 1000
+                "connection_time_ms": (time.time() - start_time) * 1000,
+                "client_ip": client_ip
             })
+        except ConnectionError as e:
+            # Connection limit exceeded
+            await error_handler.handle_websocket_error(
+                websocket, ErrorCode.CONNECTION_LIMIT_EXCEEDED,
+                str(e), user_id, room_id
+            )
+            return
         except Exception as e:
             await error_handler.handle_websocket_error(
                 websocket, ErrorCode.CONNECTION_FAILED,
@@ -233,6 +297,12 @@ async def websocket_chat_endpoint(
             cleanup_success = await error_handler.handle_connection_cleanup(
                 websocket, user_id, room_id, conn_mgr, msg_handler
             )
+            
+            # Also clean up from connection manager with IP
+            try:
+                await conn_mgr.disconnect(websocket, broadcast_leave=False, ip_address=client_ip)
+            except Exception as e:
+                logger.error(f"Error in final connection cleanup: {e}")
             
             if cleanup_success:
                 logger.log_connection_event("cleanup_completed", user_id, room_id)

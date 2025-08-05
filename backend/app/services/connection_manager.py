@@ -18,6 +18,7 @@ from ..models import (
     generate_user_id
 )
 from ..core import ErrorCode, ChatLogger, get_chat_logger
+from .rate_limiter import RateLimiter
 
 logger = get_chat_logger()
 
@@ -25,24 +26,43 @@ logger = get_chat_logger()
 class ConnectionManager:
     """Manages WebSocket connections and message broadcasting"""
     
-    def __init__(self):
+    def __init__(self, rate_limiter: Optional[RateLimiter] = None):
         # Dictionary mapping room_id -> Room objects
         self.rooms: Dict[str, Room] = {}
         # Dictionary mapping websocket -> ConnectionInfo for quick lookup
         self.connection_lookup: Dict[WebSocket, ConnectionInfo] = {}
+        # Rate limiter for connection and message limits
+        self.rate_limiter = rate_limiter
     
-    async def connect(self, websocket: WebSocket, room_id: str, user_id: Optional[str] = None) -> ConnectionInfo:
+    async def connect(self, websocket: WebSocket, room_id: str, user_id: Optional[str] = None, 
+                     ip_address: Optional[str] = None) -> ConnectionInfo:
         """
-        Accept a WebSocket connection and add it to a room
+        Accept a WebSocket connection and add it to a room with rate limiting
         
         Args:
             websocket: The WebSocket connection
             room_id: The room to join
             user_id: Optional user ID, will generate one if not provided
+            ip_address: Optional IP address for rate limiting
             
         Returns:
             ConnectionInfo object for the new connection
+            
+        Raises:
+            ConnectionError: If connection limits are exceeded
         """
+        # Check connection limits if rate limiter is available
+        if self.rate_limiter:
+            allowed, reason = self.rate_limiter.check_connection_limit(room_id, ip_address)
+            if not allowed:
+                logger.log_error(
+                    ErrorCode.CONNECTION_LIMIT_EXCEEDED,
+                    f"Connection limit exceeded: {reason}",
+                    user_id, room_id
+                )
+                await websocket.close(code=4008, reason=reason)
+                raise ConnectionError(reason)
+        
         await websocket.accept()
         
         # Generate user ID if not provided
@@ -64,6 +84,10 @@ class ConnectionManager:
         self.rooms[room_id].add_connection(connection)
         self.connection_lookup[websocket] = connection
         
+        # Add to rate limiter tracking
+        if self.rate_limiter:
+            self.rate_limiter.add_connection(room_id, user_id, ip_address)
+        
         logger.log_connection_event("established", user_id, room_id)
         
         # Broadcast user join message to other users in the room
@@ -75,13 +99,15 @@ class ConnectionManager:
         
         return connection
     
-    async def disconnect(self, websocket: WebSocket, broadcast_leave: bool = True) -> Optional[ConnectionInfo]:
+    async def disconnect(self, websocket: WebSocket, broadcast_leave: bool = True, 
+                        ip_address: Optional[str] = None) -> Optional[ConnectionInfo]:
         """
         Handle WebSocket disconnection and cleanup
         
         Args:
             websocket: The WebSocket connection to disconnect
             broadcast_leave: Whether to broadcast leave message (False during cleanup)
+            ip_address: Optional IP address for rate limiter cleanup
             
         Returns:
             ConnectionInfo of the disconnected user, or None if not found
@@ -92,6 +118,10 @@ class ConnectionManager:
         
         room_id = connection.room_id
         user_id = connection.user_id
+        
+        # Remove from rate limiter tracking
+        if self.rate_limiter:
+            self.rate_limiter.remove_connection(room_id, user_id, ip_address)
         
         # Remove connection from room
         if room_id in self.rooms:
