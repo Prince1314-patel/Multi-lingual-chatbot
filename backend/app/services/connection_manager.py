@@ -91,13 +91,15 @@ class ConnectionManager:
         logger.log_connection_event("established", user_id, room_id)
         
         # Notify the new user about existing users in the room
-        existing_users = room.get_all_user_ids()
+        room = self.rooms[room_id]
+        existing_users = list(room.get_all_connections().keys())
         if existing_users:
             # Create a message that contains the list of existing users
-            existing_users_message = {
-                "type": "existing_users",
-                "user_ids": existing_users
-            }
+            existing_users_message = UserJoinMessage(
+                user_id=user_id,
+                room_id=room_id,
+                timestamp=datetime.utcnow(),
+            )
             await self.send_message(websocket, existing_users_message)
 
         # Broadcast user join message to other users in the room

@@ -67,15 +67,22 @@ def room_manager():
 
 
 @pytest.fixture
-def connection_manager(room_manager):
-    """Create a ConnectionManager for testing"""
-    return ConnectionManager(room_manager)
+def rate_limiter():
+    """Create a RateLimiter for testing"""
+    from app.services.rate_limiter import RateLimiter, RateLimitConfig
+    return RateLimiter(RateLimitConfig())
 
 
 @pytest.fixture
-def message_handler(connection_manager, room_manager):
+def connection_manager(rate_limiter):
+    """Create a ConnectionManager for testing"""
+    return ConnectionManager(rate_limiter)
+
+
+@pytest.fixture
+def message_handler(connection_manager, room_manager, rate_limiter):
     """Create a MessageHandler for testing"""
-    return MessageHandler(connection_manager, room_manager)
+    return MessageHandler(connection_manager, room_manager, rate_limiter)
 
 
 class TestChatLogger:

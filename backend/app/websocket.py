@@ -142,11 +142,21 @@ async def websocket_chat_endpoint(
     client_ip = get_client_ip(websocket)
     
     connection = None
+    room = None
     
     try:
-        # Accept WebSocket connection and join room with timeout handling
         # Get or create room with error handling
         room = room_mgr.get_or_create_room(room_id)
+    except Exception as e:
+        await error_handler.handle_websocket_error(
+            websocket, ErrorCode.ROOM_NOT_FOUND,
+            f"Failed to create or access room: {str(e)}",
+            user_id, room_id, e
+        )
+        return
+
+    try:
+        # Accept WebSocket connection and join room with timeout handling
         try:
             connection = await conn_mgr.connect(websocket, room_id, user_id, client_ip)
             logger.log_connection_event("established", user_id, room_id, {
@@ -158,13 +168,6 @@ async def websocket_chat_endpoint(
             await error_handler.handle_websocket_error(
                 websocket, ErrorCode.CONNECTION_LIMIT_EXCEEDED,
                 str(e), user_id, room_id
-            )
-            return
-        except Exception as e:
-            await error_handler.handle_websocket_error(
-                websocket, ErrorCode.ROOM_NOT_FOUND,
-                f"Failed to create or access room: {str(e)}",
-                user_id, room_id, e
             )
             return
         
