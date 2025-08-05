@@ -39,8 +39,8 @@ def init_websocket_services():
     rate_limiter = RateLimiter(rate_limit_config)
     
     # Initialize services with rate limiter
-    connection_manager = ConnectionManager(rate_limiter)
     room_manager = RoomManager(cleanup_timeout_minutes=30)
+    connection_manager = ConnectionManager(room_manager, rate_limiter)
     message_handler = MessageHandler(connection_manager, room_manager, rate_limiter)
     
     # Initialize memory optimizer
@@ -204,6 +204,49 @@ async def websocket_chat_endpoint(
                 if message.get("type") == "websocket.disconnect":
                     logger.log_connection_event("disconnected", user_id, room_id)
                     break
+                
+                # Process the received message
+                if "text" in message:
+                    try:
+                        # Parse the JSON message
+                        message_data = json.loads(message["text"])
+                        
+                        # Process the message through message handler
+                        await msg_handler.handle_message(websocket, message_data)
+                        
+                        logger.log_message_event(
+                            "message_processed", user_id, room_id, 
+                            message_data.get("type", "unknown"),
+                            {"processing_time_ms": (time.time() - message_start_time) * 1000}
+                        )
+                        
+                    except json.JSONDecodeError as e:
+                        logger.log_error(
+                            ErrorCode.INVALID_MESSAGE_FORMAT,
+                            f"Invalid JSON in message: {str(e)}",
+                            user_id, room_id, e
+                        )
+                        await conn_mgr.send_error(websocket, "INVALID_JSON", "Message must be valid JSON")
+                        
+                    except Exception as e:
+                        logger.log_error(
+                            ErrorCode.MESSAGE_PROCESSING_ERROR,
+                            f"Error processing message: {str(e)}",
+                            user_id, room_id, e
+                        )
+                        await conn_mgr.send_error(websocket, "PROCESSING_ERROR", "Failed to process message")
+                
+                elif "bytes" in message:
+                    try:
+                        # Handle binary messages (voice messages)
+                        await msg_handler.handle_binary_message(websocket, message["bytes"], user_id, room_id)
+                        
+                    except Exception as e:
+                        logger.log_error(
+                            ErrorCode.MESSAGE_PROCESSING_ERROR,
+                            f"Error processing binary message: {str(e)}",
+                            user_id, room_id, e
+                        )
                 
             except WebSocketDisconnect:
                 logger.log_connection_event("disconnected", user_id, room_id)

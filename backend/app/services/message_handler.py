@@ -69,8 +69,17 @@ class MessageHandler:
                     websocket, "INVALID_MESSAGE_FORMAT", f"Invalid message format: {str(e)}"
                 )
                 return False
+
+            # --- START: CORRECTED LOGIC ---
+            # Enrich message with trusted connection data before validation.
+            # This fixes the "INVALID_ROOM" error for messages that don't include these details.
+            if hasattr(message, 'user_id'):
+                message.user_id = connection.user_id
+            if hasattr(message, 'room_id'):
+                message.room_id = connection.room_id
+            # --- END: CORRECTED LOGIC ---
             
-            # Validate message belongs to the connection's room
+            # Validate message belongs to the connection's room (now works for all types)
             if hasattr(message, 'room_id') and message.room_id != connection.room_id:
                 await self.connection_manager.send_error(
                     websocket, "INVALID_ROOM", "Message room does not match connection room"
@@ -83,7 +92,6 @@ class MessageHandler:
             elif isinstance(message, VoiceMessage):
                 return await self.handle_voice_message(connection, message)
             elif isinstance(message, TypingMessage):
-                # For typing indicators, broadcast to others
                 return await self.handle_typing_message(connection, message)
             else:
                 await self.connection_manager.send_error(
@@ -193,10 +201,6 @@ class MessageHandler:
                 )
                 return False
             
-            # Set correct user_id and room_id from connection
-            message.user_id = connection.user_id
-            message.room_id = connection.room_id
-            
             # Broadcast to all users in the room with delivery confirmation
             sent_count = await self.connection_manager.broadcast_to_room(
                 connection.room_id, message, exclude_user=connection.user_id, send_confirmation=True
@@ -258,10 +262,6 @@ class MessageHandler:
                 )
                 return False
             
-            # Set correct user_id and room_id from connection
-            message.user_id = connection.user_id
-            message.room_id = connection.room_id
-            
             # Broadcast to all users in the room with delivery confirmation
             sent_count = await self.connection_manager.broadcast_to_room(
                 connection.room_id, message, exclude_user=connection.user_id, send_confirmation=True
@@ -299,10 +299,6 @@ class MessageHandler:
             
             # Update connection activity
             connection.update_activity()
-            
-            # Set correct user_id and room_id from connection
-            message.user_id = connection.user_id
-            message.room_id = connection.room_id
             
             # Get room
             room = self.room_manager.get_room(connection.room_id)

@@ -19,6 +19,7 @@ from ..models import (
 )
 from ..core import ErrorCode, ChatLogger, get_chat_logger
 from .rate_limiter import RateLimiter
+from .room_manager import RoomManager
 
 logger = get_chat_logger()
 
@@ -76,11 +77,10 @@ class ConnectionManager:
         )
         
         # Create room if it doesn't exist
-        if room_id not in self.rooms:
-            self.rooms[room_id] = Room(room_id=room_id)
+        room = self.room_manager.get_or_create_room(room_id)
         
         # Add connection to room and lookup table
-        self.rooms[room_id].add_connection(connection)
+        room.add_connection(connection)
         self.connection_lookup[websocket] = connection
         
         # Add to rate limiter tracking
@@ -125,11 +125,12 @@ class ConnectionManager:
             self.rate_limiter.remove_connection(room_id, user_id, ip_address)
         
         # Remove connection from room
-        if room_id in self.rooms:
-            self.rooms[room_id].remove_connection(user_id)
+        room = self.room_manager.get_room(room_id)
+        if room:
+            room.remove_connection(user_id)
             
             # Broadcast user leave message to remaining users (if requested)
-            if broadcast_leave and not self.rooms[room_id].is_empty():
+            if broadcast_leave and not room.is_empty():
                 leave_message = UserLeaveMessage(
                     user_id=user_id,
                     room_id=room_id
@@ -137,8 +138,8 @@ class ConnectionManager:
                 await self.broadcast_to_room(room_id, leave_message)
             
             # Clean up empty room
-            if self.rooms[room_id].is_empty():
-                del self.rooms[room_id]
+            if room.is_empty():
+                self.room_manager.delete_room(room_id)
                 logger.log_connection_event("room_deleted", None, room_id, {"reason": "empty"})
         
         logger.log_connection_event("disconnected", user_id, room_id)
@@ -228,7 +229,8 @@ class ConnectionManager:
         Returns:
             Number of connections the message was successfully sent to
         """
-        if room_id not in self.rooms:
+        room = self.room_manager.get_room(room_id)
+        if not room:
             logger.log_error(
                 ErrorCode.ROOM_NOT_FOUND,
                 f"Attempted to broadcast to non-existent room: {room_id}",
@@ -236,7 +238,7 @@ class ConnectionManager:
             )
             return 0
         
-        room = self.rooms[room_id]
+        room = self.room_manager.get_room(room_id)
         connections = room.get_all_connections()
         successful_sends = 0
         failed_connections = []
@@ -372,7 +374,7 @@ class ConnectionManager:
         Returns:
             Room object if found, None otherwise
         """
-        return self.rooms.get(room_id)
+        return self.room_manager.get_room(room_id)
     
     def get_room_connection_count(self, room_id: str) -> int:
         """
@@ -384,7 +386,7 @@ class ConnectionManager:
         Returns:
             Number of active connections, 0 if room doesn't exist
         """
-        room = self.rooms.get(room_id)
+        room = self.room_manager.get_room(room_id)
         return room.get_connection_count() if room else 0
     
     def get_active_rooms(self) -> List[str]:
@@ -394,7 +396,7 @@ class ConnectionManager:
         Returns:
             List of room IDs that have active connections
         """
-        return [room_id for room_id, room in self.rooms.items() if not room.is_empty()]
+        return self.room_manager.get_active_rooms()
     
     def get_total_connections(self) -> int:
         """
@@ -409,7 +411,7 @@ class ConnectionManager:
         """
         Clean up expired typing indicators across all rooms
         """
-        for room in self.rooms.values():
+        for room in self.room_manager.rooms.values():
             room.cleanup_expired_typing()
     
     def get_room_stats(self, room_id: str) -> Optional[Dict]:
@@ -422,7 +424,7 @@ class ConnectionManager:
         Returns:
             Dictionary with room statistics, None if room doesn't exist
         """
-        room = self.rooms.get(room_id)
+        room = self.room_manager.get_room(room_id)
         if not room:
             return None
         
