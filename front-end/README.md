@@ -112,6 +112,7 @@ console.log(config.connectionTimeout); // 10000
 - Automatic reconnection with configurable attempts and delays
 - Room-based URL generation
 - Connection timeout handling
+- Binary message support for voice data transmission
 - Debug logging for development
 
 ## 🧪 Testing
@@ -163,9 +164,10 @@ describe('ChatWindow', () => {
 
 ### Test Coverage
 Current test coverage includes:
-- **ChatWindow**: User join/leave notifications, user count display, WebSocket message handling
+- **ChatWindow**: User join/leave notifications, user count display, WebSocket message handling, voice message transmission
 - **Component Mocking**: WebSocket hooks, child components for isolated testing
-- **Integration Tests**: Multi-user scenarios, message flow testing
+- **Integration Tests**: Multi-user scenarios, message flow testing, voice message end-to-end flow
+- **Voice Message Testing**: MediaRecorder API mocking, audio playback testing, binary WebSocket message handling
 
 ## 🧪 Development Tools
 
@@ -193,10 +195,60 @@ Built with shadcn/ui and Tailwind CSS:
 - Consistent styling with CSS custom properties
 - Dark/light theme support (planned)
 
+## 🎤 Voice Message Features
+
+The application includes comprehensive voice message functionality:
+
+### Voice Recording (InputBar)
+- **MediaRecorder API Integration**: Records audio using WebM format with Opus codec
+- **Real-time Recording Feedback**: Visual indicators and recording status display
+- **Error Handling**: Comprehensive error messages for microphone access, browser support, and recording failures
+- **Audio Quality Settings**: Optimized settings with echo cancellation and noise suppression
+- **Recording Controls**: Start/stop recording with intuitive button states
+
+### Voice Playback (MessageBubble)
+- **Audio Player Controls**: Play/pause functionality with visual feedback
+- **Progress Visualization**: Audio progress bar with current time and duration display
+- **Automatic Audio Management**: Proper cleanup of audio URLs and event listeners
+- **Error Handling**: Graceful handling of audio loading and playback errors
+- **Responsive Design**: Voice message bubbles adapt to current user vs. other user styling
+
+### WebSocket Voice Transmission
+- **Binary Data Support**: Efficient transmission of audio data via WebSocket binary messages
+- **Dual Format Support**: Handles both binary WebSocket messages and JSON-encoded audio data
+- **Message Status Tracking**: Visual indicators for sending, sent, and failed voice messages
+- **Connection State Awareness**: Prevents voice message sending when disconnected
+
+### Technical Implementation Details
+
+#### Voice Recording Flow
+1. **Permission Request**: Requests microphone access with error handling for denied/unavailable scenarios
+2. **MediaRecorder Setup**: Configures WebM format with Opus codec, echo cancellation, and noise suppression
+3. **Recording Management**: Handles start/stop recording with visual feedback and error states
+4. **Audio Processing**: Converts recorded Blob to ArrayBuffer for WebSocket transmission
+
+#### Voice Message Types
+```typescript
+interface VoiceMessage {
+  from: string;
+  to: string;
+  type: 'voice';
+  audioData: ArrayBuffer;
+  duration?: number;
+  timestamp: string;
+  status: "sending" | "sent" | "delivered" | "read";
+}
+```
+
+#### WebSocket Message Formats
+- **Binary Messages**: Raw audio data transmitted as ArrayBuffer via WebSocket binary frames
+- **JSON Voice Messages**: Voice metadata with hex-encoded audio data for backend compatibility
+- **Message Types**: Supports 'voice', 'text', 'typing', 'user_join', 'user_leave', 'error' message types
+
 ### Chat Components
-- **ChatWindow**: Main container managing WebSocket connection and message state
-- **MessageBubble**: Displays individual messages with translation support
-- **InputBar**: Handles text input and voice recording with typing indicators
+- **ChatWindow**: Main container managing WebSocket connection and message state with voice message support
+- **MessageBubble**: Displays individual text and voice messages with playback controls and translation support
+- **InputBar**: Handles text input and voice recording with MediaRecorder API integration
 - **TypingIndicator**: Shows when other users are typing
 
 ## 🔗 Routing

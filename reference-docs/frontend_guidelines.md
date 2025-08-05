@@ -11,7 +11,7 @@ This document outlines best practices, architectural decisions, and coding stand
 - **State Management:** React Context API or Redux Toolkit for global state  
 - **Networking:** Native WebSocket API for real-time communication  
 - **Build Tool:** Vite or Create React App (CRA) for fast builds and hot reload  
-- **Testing:** Jest with React Testing Library  
+- **Testing:** Vitest with React Testing Library and jsdom  
 
 ---
 
@@ -23,17 +23,17 @@ This document outlines best practices, architectural decisions, and coding stand
 - **Component Breakdown:**  
   - **App:** Root component managing routing and context providers.  
   - **RoomJoin:** Component to enter or generate a chat room link.  
-  - **ChatWindow:** Displays messages and controls message sending.  
-  - **MessageList:** Renders a scrollable list of messages (text + audio).  
-  - **MessageInput:** Text input box and voice record button.  
-  - **AudioPlayer:** For playing back received and synthesized voice messages.  
+  - **ChatWindow:** Displays messages and controls message sending with voice message support.  
+  - **MessageBubble:** Renders individual text and voice messages with integrated audio playback controls.  
+  - **InputBar:** Text input box and voice recording with MediaRecorder API integration.  
+  - **TypingIndicator:** Shows when other users are typing.  
   - **LanguageSelector:** Allows users to choose preferred language(s).  
   - **ProgressIndicator:** Shows transcription/translation/TTS progress.  
   - **ConfigTest:** Development component for testing and displaying configuration values.  
 
 - **Hooks:**  
-  - Custom hooks for WebSocket connection and message handling (e.g., `useWebSocket`).  
-  - Hooks for media recording (`useMediaRecorder`).  
+  - Custom hooks for WebSocket connection and message handling (e.g., `useWebSocket`) with binary message support.  
+  - Built-in MediaRecorder API integration within InputBar component for voice recording.  
 
 ---
 
@@ -77,17 +77,23 @@ This document outlines best practices, architectural decisions, and coding stand
 
 ## WebSocket Integration
 
-- Maintain a single WebSocket connection per chat room session.  
-- Use JSON message format with clear types (e.g., text, audio, progress, error).  
+- Maintain a single WebSocket connection per chat room session with binary message support.  
+- Use JSON message format with clear types (e.g., text, voice, typing, user_join, user_leave, error).  
+- Support binary WebSocket messages for efficient voice data transmission.  
 - Manage reconnection logic and show connection status to users.  
+- Handle both JSON-encoded audio data and binary audio data formats.  
 
 ---
 
 ## Audio Recording & Playback
 
-- Use MediaRecorder API to capture voice messages in WAV or OGG format.  
-- Provide visual feedback when recording (e.g., timer or waveform).  
-- Support playback of received audio seamlessly within the chat window.  
+- **MediaRecorder API**: Capture voice messages in WebM format with Opus codec for optimal compression and quality
+- **Recording Feedback**: Visual indicators including recording status, animated recording indicator, and error messages
+- **Audio Quality**: Configure MediaRecorder with echo cancellation, noise suppression, and 44.1kHz sample rate
+- **Playback Controls**: Integrated audio player with play/pause, progress bar, and time display
+- **Error Handling**: Comprehensive error handling for microphone permissions, browser support, and audio failures
+- **Binary WebSocket Support**: Efficient transmission of audio data via WebSocket binary messages
+- **Audio Management**: Proper cleanup of audio URLs and event listeners to prevent memory leaks  
 
 ---
 
@@ -126,11 +132,42 @@ import { ConfigTest } from '@/components/test/ConfigTest';
 
 ## Testing Guidelines
 
-- Write unit tests for components and hooks.  
-- Perform integration tests simulating full chat flows.  
-- Use mocks for WebSocket and AI service calls during tests.  
-- Test accessibility and mobile responsiveness manually or with automated tools.
-- Use the ConfigTest component to verify configuration during development and debugging.
+### Test Framework Setup
+- **Vitest:** Fast unit testing framework with native ES modules support
+- **React Testing Library:** Component testing with user-centric approach
+- **jsdom:** DOM simulation for browser environment testing
+- **Jest DOM:** Additional matchers for DOM assertions
+
+### Testing Structure
+```
+src/
+├── components/
+│   └── chat/
+│       ├── __tests__/
+│       │   └── ChatWindow.test.tsx    # Component tests
+│       └── ChatWindow.tsx
+└── test/
+    └── setup.ts                       # Global test configuration
+```
+
+### Testing Best Practices
+- **Component Testing:** Write unit tests for components and hooks using React Testing Library
+- **Integration Testing:** Perform integration tests simulating full chat flows with WebSocket mocking
+- **Mocking Strategy:** Use Vitest mocks for WebSocket connections, AI service calls, and child components
+- **User-Centric Testing:** Test user interactions and behaviors rather than implementation details
+- **Accessibility Testing:** Include accessibility checks in component tests
+- **Configuration Testing:** Use the ConfigTest component to verify configuration during development
+
+### Current Test Coverage
+- **ChatWindow Component:** Comprehensive tests for user notifications, join/leave events, user count display
+- **WebSocket Integration:** Mocked WebSocket behavior for testing message handling
+- **Multi-user Scenarios:** Tests for multiple users joining and leaving chat rooms
+
+### Running Tests
+```bash
+npm run test        # Watch mode for development
+npm run test:run    # Single run for CI/production
+```
 
 ---
 

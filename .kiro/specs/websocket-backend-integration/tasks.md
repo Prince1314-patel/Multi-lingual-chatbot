@@ -82,7 +82,7 @@
   - Create comprehensive tests for user presence notifications with Vitest and React Testing Library
   - _Requirements: 2.3, 2.4_
 
-- [ ] 13. Add voice recording integration with backend
+- [x] 13. Add voice recording integration with backend
   - Update InputBar component to handle voice message transmission
   - Implement binary audio data sending via WebSocket
   - Add voice message playback for received audio

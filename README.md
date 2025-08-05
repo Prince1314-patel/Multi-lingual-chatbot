@@ -194,8 +194,8 @@ python -m pytest --cov              # Run with coverage report
 ### ✅ Phase 1: Core Chat with WebSocket & Room Links
 - [x] React frontend with chat UI
 - [x] WebSocket connection management
-- [ ] FastAPI backend with room-based WebSocket routing
-- [ ] Text and voice message transmission
+- [x] FastAPI backend with room-based WebSocket routing
+- [x] Text and voice message transmission
 
 ### 🔄 Phase 2: Text Translation with Groq LLM
 - [ ] Groq API integration for text translation

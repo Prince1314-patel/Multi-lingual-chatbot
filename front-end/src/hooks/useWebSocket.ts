@@ -14,6 +14,7 @@ export interface WebSocketError {
 
 export interface UseWebSocketOptions {
   onMessage?: (message: WebSocketMessage) => void;
+  onBinaryMessage?: (data: ArrayBuffer) => void;
   onError?: (error: WebSocketError) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
@@ -25,6 +26,7 @@ export interface UseWebSocketReturn {
   isConnecting: boolean;
   error: WebSocketError | null;
   sendMessage: (message: WebSocketMessage) => boolean;
+  sendBinaryMessage?: (data: ArrayBuffer) => boolean;
   connect: () => void;
   disconnect: () => void;
   reconnect: () => void;
@@ -36,6 +38,7 @@ export const useWebSocket = (
 ): UseWebSocketReturn => {
   const {
     onMessage,
+    onBinaryMessage,
     onError,
     onConnect,
     onDisconnect,
@@ -118,6 +121,14 @@ export const useWebSocket = (
 
       ws.onmessage = (event) => {
         try {
+          // Handle binary messages
+          if (event.data instanceof ArrayBuffer) {
+            debugLog('WebSocket binary message received:', event.data.byteLength, 'bytes');
+            onBinaryMessage?.(event.data);
+            return;
+          }
+          
+          // Handle text messages (JSON)
           const message: WebSocketMessage = JSON.parse(event.data);
           debugLog('WebSocket message received:', message);
           onMessage?.(message);
@@ -203,6 +214,22 @@ export const useWebSocket = (
     }
   }, [handleError]);
 
+  const sendBinaryMessage = useCallback((data: ArrayBuffer): boolean => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      handleError('NOT_CONNECTED', 'WebSocket is not connected');
+      return false;
+    }
+
+    try {
+      wsRef.current.send(data);
+      debugLog('WebSocket binary message sent:', data.byteLength, 'bytes');
+      return true;
+    } catch (error) {
+      handleError('SEND_FAILED', `Failed to send binary message: ${error}`);
+      return false;
+    }
+  }, [handleError]);
+
   // Connect on mount and room change
   useEffect(() => {
     connect();
@@ -224,6 +251,7 @@ export const useWebSocket = (
     isConnecting,
     error,
     sendMessage,
+    sendBinaryMessage,
     connect,
     disconnect,
     reconnect

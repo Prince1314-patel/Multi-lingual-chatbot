@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageBubble, Message, SystemMessage } from "./MessageBubble";
+import { MessageBubble, Message, VoiceMessage, SystemMessage } from "./MessageBubble";
 import { TypingIndicator } from "./TypingIndicator";
 import { InputBar } from "./InputBar";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -18,7 +18,7 @@ interface ChatWindowProps {
 
 
 export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) => {
-  const [messages, setMessages] = useState<(Message | SystemMessage)[]>([]);
+  const [messages, setMessages] = useState<(Message | VoiceMessage | SystemMessage)[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const [connectionError, setConnectionError] = useState<WebSocketError | null>(null);
@@ -32,9 +32,11 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
     isConnecting,
     error: wsError,
     sendMessage: sendWebSocketMessage,
+    sendBinaryMessage: sendWebSocketBinaryMessage,
     reconnect
   } = useWebSocket(roomId, {
     onMessage: handleWebSocketMessage,
+    onBinaryMessage: handleWebSocketBinaryMessage,
     onError: handleWebSocketError,
     onConnect: () => {
       debugLog('Connected to chat room:', roomId);
@@ -54,11 +56,11 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
       if (data.from !== currentUser) {
         setIsOtherUserTyping(data.isTyping);
       }
-    } else if (data.type === 'message') {
+    } else if (data.type === 'message' || data.type === 'text') {
       const message: Message = {
-        from: data.from,
-        to: data.to,
-        text: data.text,
+        from: data.from || data.user_id,
+        to: data.to || otherUser,
+        text: data.text || data.content,
         lang: data.lang || 'en',
         timestamp: data.timestamp,
         status: 'sent'
@@ -69,6 +71,29 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
           ? { ...msg, status: 'sent' as const }
           : msg
       ).concat(message.from !== currentUser ? [message] : []));
+    } else if (data.type === 'voice') {
+      // Handle voice message from JSON (with hex-encoded audio data)
+      if (data.audio_data && data.user_id !== currentUser) {
+        try {
+          const audioData = new Uint8Array(
+            data.audio_data.match(/.{1,2}/g)?.map((byte: string) => parseInt(byte, 16)) || []
+          ).buffer;
+          
+          const voiceMessage: VoiceMessage = {
+            from: data.user_id,
+            to: otherUser,
+            type: 'voice',
+            audioData,
+            duration: data.duration,
+            timestamp: data.timestamp,
+            status: 'sent'
+          };
+          
+          setMessages(prev => [...prev, voiceMessage]);
+        } catch (error) {
+          console.error('Error processing voice message:', error);
+        }
+      }
     } else if (data.type === 'user_join') {
       // Handle user join notifications
       const userId = data.user_id;
@@ -109,6 +134,23 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
         timestamp: new Date().toISOString()
       });
     }
+  }
+
+  // Handle WebSocket binary messages (voice data)
+  function handleWebSocketBinaryMessage(data: ArrayBuffer) {
+    debugLog('Received WebSocket binary message:', data.byteLength, 'bytes');
+    
+    // Create voice message from binary data
+    const voiceMessage: VoiceMessage = {
+      from: otherUser, // Assume it's from the other user since we don't send binary to ourselves
+      to: currentUser,
+      type: 'voice',
+      audioData: data,
+      timestamp: new Date().toISOString(),
+      status: 'sent'
+    };
+    
+    setMessages(prev => [...prev, voiceMessage]);
   }
 
   // Handle WebSocket errors
@@ -168,10 +210,12 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
     // Add message with sending status
     setMessages(prev => [...prev, message]);
 
-    // Send to WebSocket
+    // Send to WebSocket using the backend's expected format
     const success = sendWebSocketMessage({
-      type: 'message',
-      ...message
+      type: 'text',
+      user_id: currentUser,
+      room_id: roomId,
+      content: text
     });
 
     if (success) {
@@ -190,6 +234,64 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
           ? { ...msg, status: 'failed' as const }
           : msg
       ));
+    }
+  };
+
+  const sendVoiceMessage = async (audioBlob: Blob) => {
+    if (!isConnected) {
+      debugLog('Cannot send voice message: WebSocket is not connected');
+      setConnectionError({
+        code: 'NOT_CONNECTED',
+        message: 'Cannot send voice message: Not connected to server',
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    try {
+      // Convert blob to ArrayBuffer
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      
+      // Create voice message for UI
+      const voiceMessage: VoiceMessage = {
+        from: currentUser,
+        to: otherUser,
+        type: 'voice',
+        audioData: arrayBuffer,
+        timestamp: new Date().toISOString(),
+        status: 'sending'
+      };
+
+      // Add message with sending status
+      setMessages(prev => [...prev, voiceMessage]);
+
+      // Send binary data via WebSocket
+      const success = sendWebSocketBinaryMessage && sendWebSocketBinaryMessage(arrayBuffer);
+
+      if (success) {
+        // Update status to sent (optimistic update)
+        setTimeout(() => {
+          setMessages(prev => prev.map(msg => 
+            msg.timestamp === voiceMessage.timestamp && msg.from === currentUser
+              ? { ...msg, status: 'sent' as const }
+              : msg
+          ));
+        }, 500);
+      } else {
+        // Update status to failed
+        setMessages(prev => prev.map(msg => 
+          msg.timestamp === voiceMessage.timestamp && msg.from === currentUser
+            ? { ...msg, status: 'failed' as const }
+            : msg
+        ));
+      }
+    } catch (error) {
+      console.error('Error sending voice message:', error);
+      setConnectionError({
+        code: 'VOICE_SEND_FAILED',
+        message: 'Failed to send voice message',
+        timestamp: new Date().toISOString()
+      });
     }
   };
 
@@ -307,6 +409,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
       {/* Input */}
       <InputBar
         onSendMessage={sendMessage}
+        onSendVoiceMessage={sendVoiceMessage}
         onTyping={handleTyping}
         disabled={!isConnected}
       />
