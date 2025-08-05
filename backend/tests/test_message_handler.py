@@ -25,15 +25,15 @@ class MockWebSocket:
 
 
 @pytest.fixture
-def connection_manager():
-    """Create a mock ConnectionManager"""
-    return ConnectionManager()
-
-
-@pytest.fixture
 def room_manager():
     """Create a mock RoomManager"""
     return RoomManager()
+
+
+@pytest.fixture
+def connection_manager(room_manager):
+    """Create a mock ConnectionManager"""
+    return ConnectionManager(room_manager)
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def mock_connection():
     connection = ConnectionInfo(
         websocket=ws,
         user_id="test_user_123",
-        room_id="test_room_456"
+        room_id="test-room-456"
     )
     return connection
 
@@ -60,7 +60,7 @@ async def test_handle_text_message_success(message_handler, mock_connection):
     # Create text message
     message = TextMessage(
         user_id="test_user_123",
-        room_id="test_room_456",
+        room_id="test-room-456",
         content="Hello world!"
     )
     
@@ -85,7 +85,7 @@ async def test_handle_text_message_empty_content(message_handler, mock_connectio
     # Create text message with valid content first, then modify it
     message = TextMessage(
         user_id="test_user_123",
-        room_id="test_room_456",
+        room_id="test-room-456",
         content="valid content"
     )
     
@@ -112,7 +112,7 @@ async def test_handle_voice_message_success(message_handler, mock_connection):
     audio_data = b"fake_audio_data_here"
     message = VoiceMessage(
         user_id="test_user_123",
-        room_id="test_room_456",
+        room_id="test-room-456",
         audio_data=audio_data,
         duration=5.0,
         audio_format="webm"
@@ -139,7 +139,7 @@ async def test_handle_voice_message_no_audio_data(message_handler, mock_connecti
     # Create voice message without audio data
     message = VoiceMessage(
         user_id="test_user_123",
-        room_id="test_room_456",
+        room_id="test-room-456",
         audio_data=None
     )
     
@@ -163,7 +163,7 @@ async def test_handle_voice_message_too_large(message_handler, mock_connection):
     audio_data = b"x" * (11 * 1024 * 1024)
     message = VoiceMessage(
         user_id="test_user_123",
-        room_id="test_room_456",
+        room_id="test-room-456",
         audio_data=audio_data
     )
     
@@ -186,7 +186,7 @@ async def test_handle_voice_message_invalid_duration(message_handler, mock_conne
     # Create voice message with valid duration first, then modify it
     message = VoiceMessage(
         user_id="test_user_123",
-        room_id="test_room_456",
+        room_id="test-room-456",
         audio_data=b"fake_audio",
         duration=250.0  # Valid duration
     )
@@ -213,13 +213,13 @@ async def test_handle_typing_message_start_typing(message_handler, mock_connecti
     # Create typing message
     message = TypingMessage(
         user_id="test_user_123",
-        room_id="test_room_456",
+        room_id="test-room-456",
         is_typing=True
     )
     
     # Mock dependencies
     message_handler.connection_manager.broadcast_to_room = AsyncMock(return_value=1)
-    message_handler.room_manager.get_room = Mock(return_value=Room(room_id="test_room_456"))
+    message_handler.room_manager.get_room = Mock(return_value=Room(room_id="test-room-456"))
     
     # Handle message
     result = await message_handler.handle_typing_message(mock_connection, message)
@@ -243,13 +243,13 @@ async def test_handle_typing_message_stop_typing(message_handler, mock_connectio
     # Create typing stop message
     message = TypingMessage(
         user_id="test_user_123",
-        room_id="test_room_456",
+        room_id="test-room-456",
         is_typing=False
     )
     
     # Mock dependencies
     message_handler.connection_manager.broadcast_to_room = AsyncMock(return_value=1)
-    message_handler.room_manager.get_room = Mock(return_value=Room(room_id="test_room_456"))
+    message_handler.room_manager.get_room = Mock(return_value=Room(room_id="test-room-456"))
     
     # Handle message
     result = await message_handler.handle_typing_message(mock_connection, message)
@@ -378,7 +378,7 @@ async def test_handle_message_room_mismatch(message_handler, mock_connection):
     message_data = {
         "type": "text",
         "user_id": "test_user_123",
-        "room_id": "different_room",  # Different from connection room
+        "room_id": "different-room",  # Different from connection room
         "content": "Hello"
     }
     
@@ -403,7 +403,7 @@ async def test_handle_message_success_text(message_handler, mock_connection):
     message_data = {
         "type": "text",
         "user_id": "test_user_123",
-        "room_id": "test_room_456",
+        "room_id": "test-room-456",
         "content": "Hello world!"
     }
     
@@ -420,7 +420,7 @@ async def test_handle_message_success_text(message_handler, mock_connection):
 
 def test_get_typing_users(message_handler):
     """Test getting typing users for a room"""
-    room_id = "test_room_456"
+    room_id = "test-room-456"
     
     # Mock room with typing users
     mock_room = Mock()
@@ -437,7 +437,7 @@ def test_get_typing_users(message_handler):
 
 def test_get_typing_users_no_room(message_handler):
     """Test getting typing users for non-existent room"""
-    room_id = "non_existent_room"
+    room_id = "non-existent-room"
     
     # Mock room manager to return None
     message_handler.room_manager.get_room = Mock(return_value=None)
