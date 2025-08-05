@@ -56,20 +56,20 @@ def mock_connection():
     return ConnectionInfo(
         websocket=ws,
         user_id="test_user_123",
-        room_id="test_room_456"
+        room_id="test-room-456"
     )
-
-
-@pytest.fixture
-def connection_manager():
-    """Create a ConnectionManager for testing"""
-    return ConnectionManager()
 
 
 @pytest.fixture
 def room_manager():
     """Create a RoomManager for testing"""
     return RoomManager()
+
+
+@pytest.fixture
+def connection_manager(room_manager):
+    """Create a ConnectionManager for testing"""
+    return ConnectionManager(room_manager)
 
 
 @pytest.fixture
@@ -337,20 +337,20 @@ class TestConnectionManagerErrorHandling:
         """Test broadcasting to a room that doesn't exist"""
         text_message = TextMessage(
             user_id="user123",
-            room_id="nonexistent_room",
+            room_id="nonexistent-room",
             content="test message"
         )
         
-        result = await connection_manager.broadcast_to_room("nonexistent_room", text_message)
+        result = await connection_manager.broadcast_to_room("nonexistent-room", text_message)
         
         assert result == 0
     
     @pytest.mark.asyncio
-    async def test_broadcast_to_room_with_failed_connections(self):
+    async def test_broadcast_to_room_with_failed_connections(self, room_manager):
         """Test broadcasting when some connections fail"""
         # Create a fresh connection manager for this test
-        connection_manager = ConnectionManager()
-        room_id = "test_room"
+        connection_manager = ConnectionManager(room_manager)
+        room_id = "test-room"
         
         # Create working connection
         ws1 = MockWebSocket()
@@ -387,11 +387,10 @@ class TestErrorRecovery:
     """Test error recovery scenarios"""
     
     @pytest.mark.asyncio
-    async def test_message_handler_continues_after_error(self):
+    async def test_message_handler_continues_after_error(self, room_manager):
         """Test that message handler continues processing after an error"""
         # Create fresh instances to avoid mocking issues
-        connection_manager = ConnectionManager()
-        room_manager = RoomManager()
+        connection_manager = ConnectionManager(room_manager)
         message_handler = MessageHandler(connection_manager, room_manager)
         
         # Create mock connection
@@ -399,7 +398,7 @@ class TestErrorRecovery:
         mock_connection = ConnectionInfo(
             websocket=ws,
             user_id="test_user_123",
-            room_id="test_room_456"
+            room_id="test-room-456"
         )
         
         # Set up connection in manager
@@ -412,26 +411,26 @@ class TestErrorRecovery:
         
         # Second message should work - but we need to set up the room properly
         from app.models import Room
-        room = Room(room_id="test_room_456")
+        room = Room(room_id="test-room-456")
         room.add_connection(mock_connection)
-        room_manager.rooms["test_room_456"] = room
-        connection_manager.rooms["test_room_456"] = room
+        room_manager.rooms["test-room-456"] = room
+        connection_manager.rooms["test-room-456"] = room
         
         valid_message_data = {
             "type": "text",
             "user_id": "test_user_123",
-            "room_id": "test_room_456",
+            "room_id": "test-room-456",
             "content": "Hello world"
         }
         result2 = await message_handler.handle_message(ws, valid_message_data)
         assert result2 is True
     
     @pytest.mark.asyncio
-    async def test_connection_cleanup_on_multiple_failures(self):
+    async def test_connection_cleanup_on_multiple_failures(self, room_manager):
         """Test that connections are properly cleaned up after multiple failures"""
         # Create a fresh connection manager for this test
-        connection_manager = ConnectionManager()
-        room_id = "test_room"
+        connection_manager = ConnectionManager(room_manager)
+        room_id = "test-room"
         
         # Create multiple failing connections
         failing_connections = []
