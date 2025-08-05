@@ -118,6 +118,8 @@ npm run build        # Production build
 npm run build:dev    # Development build
 npm run lint         # Run ESLint
 npm run preview      # Preview production build
+npm run test         # Run tests in watch mode
+npm run test:run     # Run tests once
 ```
 
 ### Backend Commands (Planned)
@@ -164,9 +166,12 @@ CORS_ORIGINS=http://localhost:8080,http://localhost:3000
 ### Frontend Testing
 ```bash
 cd front-end
-npm run test        # Run Jest tests (when implemented)
-npm run test:watch  # Run tests in watch mode
+npm run test        # Run Vitest tests in watch mode
+npm run test:run    # Run tests once
 ```
+
+**Test Framework**: Vitest + React Testing Library + jsdom
+**Current Coverage**: ChatWindow component with user notifications, WebSocket integration, multi-user scenarios
 
 ### Configuration Testing
 Use the built-in ConfigTest component during development:

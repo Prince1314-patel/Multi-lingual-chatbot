@@ -75,11 +75,11 @@
   - Test frontend-backend WebSocket connection establishment
   - _Requirements: 2.5, 6.1_
 
-- [-] 12. Implement user join/leave notifications
+- [x] 12. Implement user join/leave notifications
   - Add user connection/disconnection event broadcasting
   - Update frontend to display join/leave notifications in chat
   - Add user count display in chat room header
-  - Create tests for user presence notifications
+  - Create comprehensive tests for user presence notifications with Vitest and React Testing Library
   - _Requirements: 2.3, 2.4_
 
 - [ ] 13. Add voice recording integration with backend

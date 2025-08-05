@@ -88,6 +88,8 @@ npm run build        # Production build
 npm run build:dev    # Development build with source maps
 npm run lint         # Run ESLint
 npm run preview      # Preview production build
+npm run test         # Run tests in watch mode
+npm run test:run     # Run tests once
 ```
 
 ## 🔌 WebSocket Integration
@@ -111,6 +113,59 @@ console.log(config.connectionTimeout); // 10000
 - Room-based URL generation
 - Connection timeout handling
 - Debug logging for development
+
+## 🧪 Testing
+
+### Test Framework
+- **Vitest** for fast unit and integration testing
+- **React Testing Library** for component testing
+- **jsdom** for DOM simulation
+- **Jest DOM** for additional matchers
+
+### Running Tests
+```bash
+# Run tests in watch mode (development)
+npm run test
+
+# Run tests once (CI/production)
+npm run test:run
+```
+
+### Test Structure
+```
+src/
+├── components/
+│   └── chat/
+│       ├── __tests__/
+│       │   └── ChatWindow.test.tsx    # Component tests
+│       ├── ChatWindow.tsx
+│       └── ...
+└── test/
+    └── setup.ts                       # Test configuration
+```
+
+### Writing Tests
+Tests use Vitest with React Testing Library:
+
+```typescript
+import { render, screen, waitFor } from '@testing-library/react';
+import { vi, describe, it, expect } from 'vitest';
+import { ChatWindow } from '../ChatWindow';
+
+describe('ChatWindow', () => {
+  it('should display user notifications', async () => {
+    render(<ChatWindow roomId="test-room" />);
+    
+    expect(screen.getByText(/1 user online/)).toBeInTheDocument();
+  });
+});
+```
+
+### Test Coverage
+Current test coverage includes:
+- **ChatWindow**: User join/leave notifications, user count display, WebSocket message handling
+- **Component Mocking**: WebSocket hooks, child components for isolated testing
+- **Integration Tests**: Multi-user scenarios, message flow testing
 
 ## 🧪 Development Tools
 

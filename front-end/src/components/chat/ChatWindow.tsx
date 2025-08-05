@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MessageBubble, Message } from "./MessageBubble";
+import { MessageBubble, Message, SystemMessage } from "./MessageBubble";
 import { TypingIndicator } from "./TypingIndicator";
 import { InputBar } from "./InputBar";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,11 +15,14 @@ interface ChatWindowProps {
   otherUser: string;
 }
 
+
+
 export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<(Message | SystemMessage)[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const [connectionError, setConnectionError] = useState<WebSocketError | null>(null);
+  const [connectedUsers, setConnectedUsers] = useState<Set<string>>(new Set([currentUser]));
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -66,6 +69,38 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
           ? { ...msg, status: 'sent' as const }
           : msg
       ).concat(message.from !== currentUser ? [message] : []));
+    } else if (data.type === 'user_join') {
+      // Handle user join notifications
+      const userId = data.user_id;
+      if (userId !== currentUser) {
+        setConnectedUsers(prev => new Set([...prev, userId]));
+        
+        const systemMessage: SystemMessage = {
+          type: 'system',
+          content: `${userId} joined the chat`,
+          timestamp: data.timestamp || new Date().toISOString()
+        };
+        
+        setMessages(prev => [...prev, systemMessage]);
+      }
+    } else if (data.type === 'user_leave') {
+      // Handle user leave notifications
+      const userId = data.user_id;
+      if (userId !== currentUser) {
+        setConnectedUsers(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(userId);
+          return newSet;
+        });
+        
+        const systemMessage: SystemMessage = {
+          type: 'system',
+          content: `${userId} left the chat`,
+          timestamp: data.timestamp || new Date().toISOString()
+        };
+        
+        setMessages(prev => [...prev, systemMessage]);
+      }
     } else if (data.type === 'error') {
       // Handle backend error messages
       setConnectionError({
@@ -187,7 +222,11 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
       <div className="flex items-center justify-between p-4 bg-chat-sidebar border-b">
         <div>
           <h1 className="text-lg font-semibold">{otherUser}</h1>
-          <p className="text-sm text-muted-foreground">Room: {roomId}</p>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Room: {roomId}</span>
+            <span>•</span>
+            <span>{connectedUsers.size} user{connectedUsers.size !== 1 ? 's' : ''} online</span>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {connectionError && (
@@ -242,11 +281,17 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
             const showTimestamp = index === 0 || 
               new Date(messages[index - 1]?.timestamp).getTime() < new Date(message.timestamp).getTime() - 300000; // 5 minutes
             
+            const messageKey = 'type' in message && message.type === 'system' 
+              ? `system-${message.timestamp}` 
+              : `${message.timestamp}-${(message as Message).from}`;
+            
+            const isCurrentUser = 'from' in message ? message.from === currentUser : false;
+            
             return (
               <MessageBubble
-                key={`${message.timestamp}-${message.from}`}
+                key={messageKey}
                 message={message}
-                isCurrentUser={message.from === currentUser}
+                isCurrentUser={isCurrentUser}
                 showTimestamp={showTimestamp}
               />
             );
