@@ -322,7 +322,7 @@ class MessageHandler:
             )
             
             logger.debug(f"Typing indicator from {connection.user_id} (typing: {message.is_typing}) broadcasted to {sent_count} users")
-            return sent_count > 0 or not room.get_all_connections()
+            return True
             
         except Exception as e:
             logger.error(f"Error handling typing message: {e}")

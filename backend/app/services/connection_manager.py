@@ -26,9 +26,8 @@ logger = get_chat_logger()
 class ConnectionManager:
     """Manages WebSocket connections and message broadcasting"""
     
-    def __init__(self, rate_limiter: Optional[RateLimiter] = None):
-        # Dictionary mapping room_id -> Room objects
-        self.rooms: Dict[str, Room] = {}
+    def __init__(self, room_manager: RoomManager, rate_limiter: Optional[RateLimiter] = None):
+        self.room_manager = room_manager
         # Dictionary mapping websocket -> ConnectionInfo for quick lookup
         self.connection_lookup: Dict[WebSocket, ConnectionInfo] = {}
         # Rate limiter for connection and message limits

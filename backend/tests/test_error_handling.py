@@ -361,7 +361,9 @@ class TestErrorRecovery:
     async def test_message_handler_continues_after_error(self, room_manager):
         """Test that message handler continues processing after an error"""
         # Create fresh instances to avoid mocking issues
-        connection_manager = ConnectionManager(room_manager)
+        from app.services.rate_limiter import RateLimiter, RateLimitConfig
+        rate_limiter = RateLimiter(RateLimitConfig())
+        connection_manager = ConnectionManager(rate_limiter)
         message_handler = MessageHandler(connection_manager, room_manager)
         
         # Create mock connection
