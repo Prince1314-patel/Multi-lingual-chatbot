@@ -165,43 +165,7 @@ class TestErrorHandler:
         assert result is False
         ws.send_text.assert_called_once()
     
-    @pytest.mark.asyncio
-    async def test_handle_connection_cleanup_success(self, error_handler, mock_connection):
-        """Test successful connection cleanup"""
-        # Mock connection manager and message handler
-        conn_mgr = Mock()
-        conn_mgr.get_connection_info.return_value = mock_connection
-        conn_mgr.disconnect = AsyncMock()
-        
-        msg_handler = Mock()
-        msg_handler.handle_user_disconnect = AsyncMock()
-        
-        result = await error_handler.handle_connection_cleanup(
-            mock_connection.websocket, "user123", "room456", conn_mgr, msg_handler
-        )
-        
-        assert result is True
-        msg_handler.handle_user_disconnect.assert_called_once_with(mock_connection)
-        conn_mgr.disconnect.assert_called_once_with(mock_connection.websocket, broadcast_leave=True)
     
-    @pytest.mark.asyncio
-    async def test_handle_connection_cleanup_partial_failure(self, error_handler, mock_connection):
-        """Test connection cleanup with partial failures"""
-        # Mock connection manager and message handler
-        conn_mgr = Mock()
-        conn_mgr.get_connection_info.return_value = mock_connection
-        conn_mgr.disconnect = AsyncMock(side_effect=Exception("Disconnect failed"))
-        
-        msg_handler = Mock()
-        msg_handler.handle_user_disconnect = AsyncMock()
-        
-        result = await error_handler.handle_connection_cleanup(
-            mock_connection.websocket, "user123", "room456", conn_mgr, msg_handler
-        )
-        
-        assert result is False  # Should return False due to disconnect failure
-        msg_handler.handle_user_disconnect.assert_called_once_with(mock_connection)
-        conn_mgr.disconnect.assert_called_once()
     
     @pytest.mark.asyncio
     async def test_safe_websocket_close_success(self, error_handler):

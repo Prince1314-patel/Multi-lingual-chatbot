@@ -294,23 +294,15 @@ async def websocket_chat_endpoint(
     finally:
         # Comprehensive connection cleanup with error handling
         if connection:
-            cleanup_success = await error_handler.handle_connection_cleanup(
-                websocket, user_id, room_id, conn_mgr, msg_handler
-            )
-            
-            # Also clean up from connection manager with IP
             try:
-                await conn_mgr.disconnect(websocket, broadcast_leave=False, ip_address=client_ip)
-            except Exception as e:
-                logger.error(f"Error in final connection cleanup: {e}")
-            
-            if cleanup_success:
+                await msg_handler.handle_user_disconnect(connection)
+                await conn_mgr.disconnect(websocket, broadcast_leave=True, ip_address=client_ip)
                 logger.log_connection_event("cleanup_completed", user_id, room_id)
-            else:
+            except Exception as e:
                 logger.log_error(
                     ErrorCode.CONNECTION_FAILED,
-                    "Connection cleanup had errors",
-                    user_id, room_id
+                    f"Error during connection cleanup: {str(e)}",
+                    user_id, room_id, e
                 )
 
 

@@ -173,66 +173,7 @@ class ErrorHandler:
             )
             return False
     
-    async def handle_connection_cleanup(self, websocket: WebSocket, user_id: str, 
-                                      room_id: str, connection_manager,
-                                      message_handler) -> bool:
-        """
-        Handle connection cleanup with comprehensive error handling
-        
-        Args:
-            websocket: The WebSocket connection
-            user_id: User ID for the connection
-            room_id: Room ID for the connection
-            connection_manager: ConnectionManager instance
-            message_handler: MessageHandler instance
-            
-        Returns:
-            True if cleanup was successful, False otherwise
-        """
-        cleanup_success = True
-        
-        try:
-            # Get connection info before cleanup
-            connection = connection_manager.get_connection_info(websocket)
-            
-            if connection:
-                # Handle user disconnect cleanup in message handler
-                try:
-                    await message_handler.handle_user_disconnect(connection)
-                    self.logger.log_connection_event("cleanup_message_handler", user_id, room_id)
-                except Exception as e:
-                    self.logger.log_error(
-                        ErrorCode.MESSAGE_PROCESSING_ERROR,
-                        f"Failed to cleanup message handler state: {str(e)}",
-                        user_id, room_id, e
-                    )
-                    cleanup_success = False
-                
-                # Disconnect from connection manager
-                try:
-                    await connection_manager.disconnect(websocket, broadcast_leave=True)
-                    self.logger.log_connection_event("cleanup_connection_manager", user_id, room_id)
-                except Exception as e:
-                    self.logger.log_error(
-                        ErrorCode.CONNECTION_FAILED,
-                        f"Failed to cleanup connection manager: {str(e)}",
-                        user_id, room_id, e
-                    )
-                    cleanup_success = False
-            else:
-                self.logger.log_warning(
-                    "Connection not found during cleanup", user_id, room_id
-                )
-        
-        except Exception as e:
-            self.logger.log_error(
-                ErrorCode.INTERNAL_SERVER_ERROR,
-                f"Unexpected error during connection cleanup: {str(e)}",
-                user_id, room_id, e
-            )
-            cleanup_success = False
-        
-        return cleanup_success
+    
     
     def handle_message_validation_error(self, error: Exception, user_id: str, 
                                       room_id: str) -> ErrorCode:
