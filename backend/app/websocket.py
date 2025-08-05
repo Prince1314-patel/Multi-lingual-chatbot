@@ -1,13 +1,15 @@
 import json
 import logging
+import time
 from typing import Optional
 from fastapi import WebSocket, WebSocketDisconnect, HTTPException, Depends
 from fastapi.routing import APIRouter
 
 from .services import ConnectionManager, RoomManager, MessageHandler
 from .models import validate_room_id, generate_user_id
+from .core import ErrorHandler, ErrorCode, ChatLogger, get_error_handler, get_chat_logger
 
-logger = logging.getLogger(__name__)
+logger = get_chat_logger()
 
 # Create router for WebSocket endpoints
 websocket_router = APIRouter()
@@ -26,7 +28,7 @@ def init_websocket_services():
     room_manager = RoomManager(cleanup_timeout_minutes=30)
     message_handler = MessageHandler(connection_manager, room_manager)
     
-    logger.info("WebSocket services initialized")
+    logger.log_message_event("services_initialized", None, None, "system")
 
 
 def get_services():
@@ -44,20 +46,39 @@ async def websocket_chat_endpoint(
     user_id: Optional[str] = None
 ):
     """
-    WebSocket endpoint for chat rooms
+    WebSocket endpoint for chat rooms with comprehensive error handling
     
     Args:
         websocket: WebSocket connection
         room_id: The chat room ID to join
         user_id: Optional user ID (will generate if not provided)
     """
-    # Get services
-    conn_mgr, room_mgr, msg_handler = get_services()
+    error_handler = get_error_handler()
+    start_time = time.time()
     
-    # Validate room ID
+    # Get services with error handling
+    try:
+        conn_mgr, room_mgr, msg_handler = get_services()
+    except Exception as e:
+        logger.log_error(
+            ErrorCode.SERVICE_UNAVAILABLE,
+            f"WebSocket services not available: {str(e)}",
+            exception=e
+        )
+        await error_handler.safe_websocket_close(
+            websocket, code=1011, reason="Service unavailable"
+        )
+        return
+    
+    # Validate room ID with enhanced error handling
     if not validate_room_id(room_id):
-        logger.warning(f"Invalid room ID attempted: {room_id}")
-        await websocket.close(code=4000, reason="Invalid room ID format")
+        await error_handler.handle_websocket_error(
+            websocket, ErrorCode.INVALID_ROOM_ID, 
+            f"Invalid room ID format: {room_id}"
+        )
+        await error_handler.safe_websocket_close(
+            websocket, code=4000, reason="Invalid room ID format"
+        )
         return
     
     # Generate user ID if not provided
@@ -67,103 +88,166 @@ async def websocket_chat_endpoint(
     connection = None
     
     try:
-        # Accept WebSocket connection and join room
-        connection = await conn_mgr.connect(websocket, room_id, user_id)
+        # Accept WebSocket connection and join room with timeout handling
+        try:
+            connection = await conn_mgr.connect(websocket, room_id, user_id)
+            logger.log_connection_event("established", user_id, room_id, {
+                "connection_time_ms": (time.time() - start_time) * 1000
+            })
+        except Exception as e:
+            await error_handler.handle_websocket_error(
+                websocket, ErrorCode.CONNECTION_FAILED,
+                f"Failed to establish connection: {str(e)}",
+                user_id, room_id, e
+            )
+            return
         
-        # Get or create room
-        room = room_mgr.get_or_create_room(room_id)
+        # Get or create room with error handling
+        try:
+            room = room_mgr.get_or_create_room(room_id)
+        except Exception as e:
+            await error_handler.handle_websocket_error(
+                websocket, ErrorCode.ROOM_NOT_FOUND,
+                f"Failed to create or access room: {str(e)}",
+                user_id, room_id, e
+            )
+            return
         
-        logger.info(f"User {user_id} connected to room {room_id}")
-        
-        # Send welcome message with connection info
-        welcome_message = {
-            "type": "connection_established",
-            "user_id": user_id,
-            "room_id": room_id,
-            "room_info": {
-                "connection_count": room.get_connection_count(),
-                "created_at": room.created_at.isoformat()
+        # Send welcome message with error handling
+        try:
+            welcome_message = {
+                "type": "connection_established",
+                "user_id": user_id,
+                "room_id": room_id,
+                "room_info": {
+                    "connection_count": room.get_connection_count(),
+                    "created_at": room.created_at.isoformat()
+                }
             }
-        }
+            
+            await websocket.send_text(json.dumps(welcome_message, default=str))
+            logger.log_connection_event("welcome_sent", user_id, room_id)
+            
+        except Exception as e:
+            logger.log_error(
+                ErrorCode.MESSAGE_PROCESSING_ERROR,
+                f"Failed to send welcome message: {str(e)}",
+                user_id, room_id, e
+            )
+            # Continue anyway, connection is established
         
-        await websocket.send_text(json.dumps(welcome_message))
-        
-        # Main message handling loop
+        # Main message handling loop with comprehensive error handling
         while True:
             try:
-                # Receive message from WebSocket (can be text or binary)
+                # Receive message from WebSocket with timeout
+                message_start_time = time.time()
                 message = await websocket.receive()
                 
                 if message["type"] == "websocket.receive":
                     if "text" in message:
-                        # Handle text message (JSON)
+                        # Handle text message (JSON) with detailed error handling
                         try:
                             message_data = json.loads(message["text"])
                             success = await msg_handler.handle_message(websocket, message_data)
                             
+                            processing_time = (time.time() - message_start_time) * 1000
+                            logger.log_performance("text_message_processing", processing_time, user_id, room_id)
+                            
                             if not success:
-                                logger.warning(f"Failed to handle text message from {user_id}")
+                                logger.log_warning(
+                                    "Text message processing failed", user_id, room_id
+                                )
                                 
                         except json.JSONDecodeError as e:
-                            logger.warning(f"Invalid JSON from {user_id}: {e}")
-                            await conn_mgr.send_error(
-                                websocket, "INVALID_JSON", "Message must be valid JSON"
+                            await error_handler.handle_websocket_error(
+                                websocket, ErrorCode.INVALID_JSON,
+                                f"Invalid JSON format: {str(e)}",
+                                user_id, room_id, e
+                            )
+                            
+                        except Exception as e:
+                            await error_handler.handle_websocket_error(
+                                websocket, ErrorCode.MESSAGE_PROCESSING_ERROR,
+                                f"Failed to process text message: {str(e)}",
+                                user_id, room_id, e
                             )
                             
                     elif "bytes" in message:
-                        # Handle binary message (voice data)
-                        binary_data = message["bytes"]
-                        success = await msg_handler.handle_binary_message(websocket, binary_data)
-                        
-                        if not success:
-                            logger.warning(f"Failed to handle binary message from {user_id}")
+                        # Handle binary message (voice data) with error handling
+                        try:
+                            binary_data = message["bytes"]
+                            success = await msg_handler.handle_binary_message(websocket, binary_data)
+                            
+                            processing_time = (time.time() - message_start_time) * 1000
+                            logger.log_performance("binary_message_processing", processing_time, user_id, room_id)
+                            
+                            if not success:
+                                logger.log_warning(
+                                    "Binary message processing failed", user_id, room_id
+                                )
+                                
+                        except Exception as e:
+                            await error_handler.handle_websocket_error(
+                                websocket, ErrorCode.BINARY_MESSAGE_PROCESSING_ERROR,
+                                f"Failed to process binary message: {str(e)}",
+                                user_id, room_id, e
+                            )
                     
                     else:
-                        logger.warning(f"Received message with no text or bytes from {user_id}")
-                        await conn_mgr.send_error(
-                            websocket, "INVALID_MESSAGE", "Message must contain text or binary data"
+                        await error_handler.handle_websocket_error(
+                            websocket, ErrorCode.INVALID_MESSAGE_FORMAT,
+                            "Message must contain text or binary data",
+                            user_id, room_id
                         )
                 
             except WebSocketDisconnect:
-                logger.info(f"WebSocket disconnected for user {user_id}")
+                logger.log_connection_event("disconnected", user_id, room_id)
                 break
             
             except Exception as e:
-                logger.error(f"Error handling message from {user_id}: {e}")
-                await conn_mgr.send_error(
-                    websocket, "MESSAGE_ERROR", "Failed to process message"
+                await error_handler.handle_websocket_error(
+                    websocket, ErrorCode.MESSAGE_PROCESSING_ERROR,
+                    f"Unexpected error in message loop: {str(e)}",
+                    user_id, room_id, e
                 )
+                # Continue the loop unless it's a critical error
+                if "critical" in str(e).lower():
+                    break
     
     except WebSocketDisconnect:
-        logger.info(f"WebSocket connection closed during handshake for room {room_id}")
+        logger.log_connection_event("disconnected_during_handshake", user_id, room_id)
     
     except Exception as e:
-        logger.error(f"Error in WebSocket endpoint for room {room_id}: {e}")
-        try:
-            await websocket.close(code=1011, reason="Internal server error")
-        except:
-            pass  # Connection might already be closed
+        logger.log_error(
+            ErrorCode.INTERNAL_SERVER_ERROR,
+            f"Critical error in WebSocket endpoint: {str(e)}",
+            user_id, room_id, e
+        )
+        await error_handler.safe_websocket_close(
+            websocket, code=1011, reason="Internal server error"
+        )
     
     finally:
-        # Clean up connection
+        # Comprehensive connection cleanup with error handling
         if connection:
-            try:
-                # Handle user disconnect cleanup
-                await msg_handler.handle_user_disconnect(connection)
-                
-                # Disconnect from connection manager
-                await conn_mgr.disconnect(websocket)
-                
-                logger.info(f"Cleaned up connection for user {user_id} in room {room_id}")
-                
-            except Exception as e:
-                logger.error(f"Error during connection cleanup for {user_id}: {e}")
+            cleanup_success = await error_handler.handle_connection_cleanup(
+                websocket, user_id, room_id, conn_mgr, msg_handler
+            )
+            
+            if cleanup_success:
+                logger.log_connection_event("cleanup_completed", user_id, room_id)
+            else:
+                logger.log_error(
+                    ErrorCode.CONNECTION_FAILED,
+                    "Connection cleanup had errors",
+                    user_id, room_id
+                )
 
 
 @websocket_router.get("/ws/rooms/{room_id}/info")
 async def get_room_info(room_id: str):
     """
-    Get information about a specific room
+    Get information about a specific room with comprehensive error handling
     
     Args:
         room_id: The room ID to get info for
@@ -171,54 +255,139 @@ async def get_room_info(room_id: str):
     Returns:
         Room information dictionary
     """
-    # Get services
-    conn_mgr, room_mgr, msg_handler = get_services()
-    
-    # Validate room ID
-    if not validate_room_id(room_id):
-        raise HTTPException(status_code=400, detail="Invalid room ID format")
-    
-    # Get room info
-    room_info = room_mgr.get_detailed_room_info(room_id)
-    
-    if not room_info:
-        raise HTTPException(status_code=404, detail="Room not found")
-    
-    # Add typing users info
-    room_info['typing_users'] = list(msg_handler.get_typing_users(room_id))
-    
-    return room_info
+    try:
+        # Get services with error handling
+        conn_mgr, room_mgr, msg_handler = get_services()
+        
+        # Validate room ID
+        if not validate_room_id(room_id):
+            logger.log_error(
+                ErrorCode.INVALID_ROOM_ID,
+                f"Invalid room ID format in info request: {room_id}"
+            )
+            raise HTTPException(status_code=400, detail="Invalid room ID format")
+        
+        # Get room info with error handling
+        try:
+            room_info = room_mgr.get_detailed_room_info(room_id)
+        except Exception as e:
+            logger.log_error(
+                ErrorCode.INTERNAL_SERVER_ERROR,
+                f"Failed to get room info: {str(e)}",
+                room_id=room_id,
+                exception=e
+            )
+            raise HTTPException(status_code=500, detail="Failed to retrieve room information")
+        
+        if not room_info:
+            logger.log_warning(f"Room not found in info request", room_id=room_id)
+            raise HTTPException(status_code=404, detail="Room not found")
+        
+        # Add typing users info with error handling
+        try:
+            room_info['typing_users'] = list(msg_handler.get_typing_users(room_id))
+        except Exception as e:
+            logger.log_error(
+                ErrorCode.MESSAGE_PROCESSING_ERROR,
+                f"Failed to get typing users: {str(e)}",
+                room_id=room_id,
+                exception=e
+            )
+            # Continue without typing users info
+            room_info['typing_users'] = []
+        
+        logger.log_message_event("room_info_retrieved", None, room_id, "info_request")
+        return room_info
+        
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        logger.log_error(
+            ErrorCode.INTERNAL_SERVER_ERROR,
+            f"Unexpected error in room info endpoint: {str(e)}",
+            room_id=room_id,
+            exception=e
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @websocket_router.get("/ws/rooms")
 async def list_active_rooms():
     """
-    List all active rooms
+    List all active rooms with comprehensive error handling
     
     Returns:
         List of active room IDs and basic info
     """
-    # Get services
-    conn_mgr, room_mgr, msg_handler = get_services()
-    
-    active_rooms = room_mgr.get_active_rooms()
-    
-    rooms_info = []
-    for room_id in active_rooms:
-        room_info = room_mgr.get_detailed_room_info(room_id)
-        if room_info:
-            # Add minimal info for listing
-            rooms_info.append({
-                'room_id': room_id,
-                'connection_count': room_info['connection_count'],
-                'created_at': room_info['created_at'],
-                'last_activity': room_info['last_activity']
-            })
-    
-    return {
-        'active_rooms': rooms_info,
-        'total_count': len(rooms_info)
-    }
+    try:
+        # Get services with error handling
+        conn_mgr, room_mgr, msg_handler = get_services()
+        
+        # Get active rooms with error handling
+        try:
+            active_rooms = room_mgr.get_active_rooms()
+        except Exception as e:
+            logger.log_error(
+                ErrorCode.INTERNAL_SERVER_ERROR,
+                f"Failed to get active rooms: {str(e)}",
+                exception=e
+            )
+            raise HTTPException(status_code=500, detail="Failed to retrieve active rooms")
+        
+        rooms_info = []
+        failed_rooms = []
+        
+        for room_id in active_rooms:
+            try:
+                room_info = room_mgr.get_detailed_room_info(room_id)
+                if room_info:
+                    # Add minimal info for listing
+                    rooms_info.append({
+                        'room_id': room_id,
+                        'connection_count': room_info['connection_count'],
+                        'created_at': room_info['created_at'],
+                        'last_activity': room_info['last_activity']
+                    })
+                else:
+                    failed_rooms.append(room_id)
+            except Exception as e:
+                logger.log_error(
+                    ErrorCode.INTERNAL_SERVER_ERROR,
+                    f"Failed to get info for room {room_id}: {str(e)}",
+                    room_id=room_id,
+                    exception=e
+                )
+                failed_rooms.append(room_id)
+        
+        if failed_rooms:
+            logger.log_warning(
+                f"Failed to get info for {len(failed_rooms)} rooms: {failed_rooms}"
+            )
+        
+        result = {
+            'active_rooms': rooms_info,
+            'total_count': len(rooms_info)
+        }
+        
+        if failed_rooms:
+            result['failed_rooms'] = failed_rooms
+        
+        logger.log_message_event("rooms_listed", None, None, "list_request", {
+            "total_rooms": len(rooms_info),
+            "failed_rooms": len(failed_rooms)
+        })
+        
+        return result
+        
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
+    except Exception as e:
+        logger.log_error(
+            ErrorCode.INTERNAL_SERVER_ERROR,
+            f"Unexpected error in list rooms endpoint: {str(e)}",
+            exception=e
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @websocket_router.get("/ws/stats")
@@ -246,32 +415,115 @@ async def get_websocket_stats():
 @websocket_router.get("/ws/health")
 async def websocket_health_check():
     """
-    Health check endpoint for WebSocket services
+    Health check endpoint for WebSocket services with comprehensive error handling
     
     Returns:
         Health status of WebSocket services
     """
-    try:
-        # Get services
-        conn_mgr, room_mgr, msg_handler = get_services()
-        
-        return {
-            'status': 'healthy',
-            'services': {
-                'connection_manager': 'initialized',
-                'room_manager': 'initialized', 
-                'message_handler': 'initialized'
-            },
-            'stats': {
-                'total_connections': conn_mgr.get_total_connections(),
-                'total_rooms': len(room_mgr.rooms),
-                'active_typing_timeouts': msg_handler.get_message_handler_stats()['active_typing_timeouts']
-            }
-        }
+    health_status = {
+        'status': 'unknown',
+        'services': {},
+        'stats': {},
+        'errors': []
+    }
     
+    try:
+        # Get services with individual error handling
+        try:
+            conn_mgr, room_mgr, msg_handler = get_services()
+            health_status['services']['service_initialization'] = 'healthy'
+        except Exception as e:
+            logger.log_error(
+                ErrorCode.SERVICE_UNAVAILABLE,
+                f"Services not available during health check: {str(e)}",
+                exception=e
+            )
+            health_status['services']['service_initialization'] = 'unhealthy'
+            health_status['errors'].append(f"Service initialization failed: {str(e)}")
+            raise HTTPException(status_code=503, detail="WebSocket services unavailable")
+        
+        # Check connection manager health
+        try:
+            total_connections = conn_mgr.get_total_connections()
+            active_rooms = len(conn_mgr.get_active_rooms())
+            health_status['services']['connection_manager'] = 'healthy'
+            health_status['stats']['total_connections'] = total_connections
+            health_status['stats']['active_rooms'] = active_rooms
+        except Exception as e:
+            logger.log_error(
+                ErrorCode.INTERNAL_SERVER_ERROR,
+                f"Connection manager health check failed: {str(e)}",
+                exception=e
+            )
+            health_status['services']['connection_manager'] = 'unhealthy'
+            health_status['errors'].append(f"Connection manager error: {str(e)}")
+        
+        # Check room manager health
+        try:
+            room_stats = room_mgr.get_room_stats()
+            health_status['services']['room_manager'] = 'healthy'
+            health_status['stats']['room_stats'] = room_stats
+        except Exception as e:
+            logger.log_error(
+                ErrorCode.INTERNAL_SERVER_ERROR,
+                f"Room manager health check failed: {str(e)}",
+                exception=e
+            )
+            health_status['services']['room_manager'] = 'unhealthy'
+            health_status['errors'].append(f"Room manager error: {str(e)}")
+        
+        # Check message handler health
+        try:
+            msg_stats = msg_handler.get_message_handler_stats()
+            health_status['services']['message_handler'] = 'healthy'
+            health_status['stats']['message_handler'] = msg_stats
+        except Exception as e:
+            logger.log_error(
+                ErrorCode.INTERNAL_SERVER_ERROR,
+                f"Message handler health check failed: {str(e)}",
+                exception=e
+            )
+            health_status['services']['message_handler'] = 'unhealthy'
+            health_status['errors'].append(f"Message handler error: {str(e)}")
+        
+        # Determine overall health status
+        unhealthy_services = [k for k, v in health_status['services'].items() if v == 'unhealthy']
+        
+        if not unhealthy_services:
+            health_status['status'] = 'healthy'
+        elif len(unhealthy_services) < len(health_status['services']):
+            health_status['status'] = 'degraded'
+        else:
+            health_status['status'] = 'unhealthy'
+        
+        # Add timestamp
+        health_status['timestamp'] = time.time()
+        
+        # Log health check result
+        logger.log_message_event(
+            "health_check_completed", None, None, "health_check",
+            {"status": health_status['status'], "errors": len(health_status['errors'])}
+        )
+        
+        # Return appropriate HTTP status
+        if health_status['status'] == 'healthy':
+            return health_status
+        elif health_status['status'] == 'degraded':
+            return health_status  # Still return 200 for degraded
+        else:
+            raise HTTPException(status_code=503, detail=health_status)
+    
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        raise HTTPException(status_code=503, detail="WebSocket services unavailable")
+        logger.log_error(
+            ErrorCode.INTERNAL_SERVER_ERROR,
+            f"Critical error in health check: {str(e)}",
+            exception=e
+        )
+        health_status['status'] = 'critical_error'
+        health_status['errors'].append(f"Critical health check error: {str(e)}")
+        raise HTTPException(status_code=503, detail=health_status)
 
 
 # Cleanup function for graceful shutdown
@@ -282,13 +534,13 @@ async def cleanup_websocket_services():
     try:
         if message_handler:
             await message_handler.cleanup_all_typing_timeouts()
-            logger.info("Cleaned up message handler")
+            logger.log_message_event("cleanup_completed", None, None, "message_handler")
         
         if room_manager:
             await room_manager.stop_cleanup_task()
-            logger.info("Stopped room manager cleanup task")
+            logger.log_message_event("cleanup_task_stopped", None, None, "room_manager")
         
-        logger.info("WebSocket services cleanup completed")
+        logger.log_message_event("cleanup_completed", None, None, "websocket_services")
         
     except Exception as e:
         logger.error(f"Error during WebSocket services cleanup: {e}")

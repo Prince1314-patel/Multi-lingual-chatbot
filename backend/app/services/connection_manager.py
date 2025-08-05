@@ -16,8 +16,9 @@ from ..models import (
     UserLeaveMessage,
     generate_user_id
 )
+from ..core import ErrorCode, ChatLogger, get_chat_logger
 
-logger = logging.getLogger(__name__)
+logger = get_chat_logger()
 
 
 class ConnectionManager:
@@ -62,7 +63,7 @@ class ConnectionManager:
         self.rooms[room_id].add_connection(connection)
         self.connection_lookup[websocket] = connection
         
-        logger.info(f"User {user_id} connected to room {room_id}")
+        logger.log_connection_event("established", user_id, room_id)
         
         # Broadcast user join message to other users in the room
         join_message = UserJoinMessage(
@@ -106,14 +107,14 @@ class ConnectionManager:
             # Clean up empty room
             if self.rooms[room_id].is_empty():
                 del self.rooms[room_id]
-                logger.info(f"Room {room_id} deleted (empty)")
+                logger.log_connection_event("room_deleted", None, room_id, {"reason": "empty"})
         
-        logger.info(f"User {user_id} disconnected from room {room_id}")
+        logger.log_connection_event("disconnected", user_id, room_id)
         return connection
     
     async def send_message(self, websocket: WebSocket, message: MessageType) -> bool:
         """
-        Send a message to a specific WebSocket connection
+        Send a message to a specific WebSocket connection with enhanced error handling
         
         Args:
             websocket: The target WebSocket connection
@@ -122,26 +123,69 @@ class ConnectionManager:
         Returns:
             True if message was sent successfully, False otherwise
         """
+        connection = self.get_connection_info(websocket)
+        user_id = connection.user_id if connection else "unknown"
+        room_id = connection.room_id if connection else "unknown"
+        
         try:
             # Handle VoiceMessage with binary data specially
             if isinstance(message, VoiceMessage) and message.audio_data:
+                # Validate binary data size before sending
+                if len(message.audio_data) > 10 * 1024 * 1024:  # 10MB limit
+                    logger.log_error(
+                        ErrorCode.BINARY_DATA_TOO_LARGE,
+                        f"Binary data too large: {len(message.audio_data)} bytes",
+                        user_id, room_id
+                    )
+                    return False
+                
                 # Send binary audio data directly
                 await websocket.send_bytes(message.audio_data)
+                logger.log_message_event("binary_sent", user_id, room_id, "voice", {
+                    "size_bytes": len(message.audio_data)
+                })
                 return True
             else:
                 # Send as JSON text message
-                serialized = serialize_message(message)
-                # Handle datetime serialization manually
-                json_str = json.dumps(serialized, default=str)
-                await websocket.send_text(json_str)
-                return True
+                try:
+                    serialized = serialize_message(message)
+                    json_str = json.dumps(serialized, default=str)
+                    
+                    # Check message size
+                    if len(json_str) > 1024 * 1024:  # 1MB limit for text messages
+                        logger.log_error(
+                            ErrorCode.MESSAGE_TOO_LARGE,
+                            f"Text message too large: {len(json_str)} bytes",
+                            user_id, room_id
+                        )
+                        return False
+                    
+                    await websocket.send_text(json_str)
+                    logger.log_message_event("text_sent", user_id, room_id, message.type if hasattr(message, 'type') else "unknown")
+                    return True
+                    
+                except (TypeError, ValueError) as e:
+                    logger.log_error(
+                        ErrorCode.INVALID_MESSAGE_FORMAT,
+                        f"Failed to serialize message: {str(e)}",
+                        user_id, room_id, e
+                    )
+                    return False
+                    
+        except WebSocketDisconnect:
+            logger.log_connection_event("disconnected_during_send", user_id, room_id)
+            return False
         except Exception as e:
-            logger.error(f"Failed to send message to websocket: {e}")
+            logger.log_error(
+                ErrorCode.MESSAGE_PROCESSING_ERROR,
+                f"Failed to send message: {str(e)}",
+                user_id, room_id, e
+            )
             return False
     
     async def broadcast_to_room(self, room_id: str, message: MessageType, exclude_user: Optional[str] = None) -> int:
         """
-        Broadcast a message to all connections in a room
+        Broadcast a message to all connections in a room with enhanced error handling
         
         Args:
             room_id: The room to broadcast to
@@ -152,7 +196,11 @@ class ConnectionManager:
             Number of connections the message was successfully sent to
         """
         if room_id not in self.rooms:
-            logger.warning(f"Attempted to broadcast to non-existent room: {room_id}")
+            logger.log_error(
+                ErrorCode.ROOM_NOT_FOUND,
+                f"Attempted to broadcast to non-existent room: {room_id}",
+                room_id=room_id
+            )
             return 0
         
         room = self.rooms[room_id]
@@ -160,30 +208,71 @@ class ConnectionManager:
         successful_sends = 0
         failed_connections = []
         
+        # Log broadcast attempt
+        message_type = message.type if hasattr(message, 'type') else "unknown"
+        logger.log_message_event("broadcast_started", exclude_user, room_id, message_type, {
+            "target_connections": len(connections),
+            "excluded_user": exclude_user
+        })
+        
         for user_id, connection in connections.items():
             # Skip excluded user
             if exclude_user and user_id == exclude_user:
                 continue
             
-            success = await self.send_message(connection.websocket, message)
-            if success:
-                successful_sends += 1
-                connection.update_activity()
-            else:
-                # Mark connection for cleanup
+            try:
+                success = await self.send_message(connection.websocket, message)
+                if success:
+                    successful_sends += 1
+                    connection.update_activity()
+                else:
+                    # Mark connection for cleanup
+                    failed_connections.append(connection.websocket)
+                    logger.log_warning(
+                        f"Failed to send message to user {user_id}",
+                        user_id, room_id
+                    )
+            except Exception as e:
+                logger.log_error(
+                    ErrorCode.MESSAGE_PROCESSING_ERROR,
+                    f"Error broadcasting to user {user_id}: {str(e)}",
+                    user_id, room_id, e
+                )
                 failed_connections.append(connection.websocket)
         
         # Clean up failed connections (don't broadcast leave messages during cleanup)
+        cleanup_count = 0
         for failed_ws in failed_connections:
-            await self.disconnect(failed_ws, broadcast_leave=False)
+            try:
+                await self.disconnect(failed_ws, broadcast_leave=False)
+                cleanup_count += 1
+            except Exception as e:
+                logger.log_error(
+                    ErrorCode.CONNECTION_FAILED,
+                    f"Failed to cleanup failed connection: {str(e)}",
+                    room_id=room_id, exception=e
+                )
         
         # Update room activity if message was sent successfully
         if successful_sends > 0:
-            room.update_activity()
-            if hasattr(message, 'type') and message.type in ['text', 'voice']:
-                room.increment_message_count()
+            try:
+                room.update_activity()
+                if hasattr(message, 'type') and message.type in ['text', 'voice']:
+                    room.increment_message_count()
+            except Exception as e:
+                logger.log_error(
+                    ErrorCode.INTERNAL_SERVER_ERROR,
+                    f"Failed to update room activity: {str(e)}",
+                    room_id=room_id, exception=e
+                )
         
-        logger.debug(f"Broadcasted message to {successful_sends} connections in room {room_id}")
+        # Log broadcast completion
+        logger.log_message_event("broadcast_completed", exclude_user, room_id, message_type, {
+            "successful_sends": successful_sends,
+            "failed_connections": len(failed_connections),
+            "cleaned_up_connections": cleanup_count
+        })
+        
         return successful_sends
     
     async def send_error(self, websocket: WebSocket, error_code: str, error_message: str) -> bool:
