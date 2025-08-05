@@ -78,11 +78,11 @@ class MessageHandler:
                 return False
             
             # Route message based on type
-            if isinstance(message, TextMessage):
-                return await self.handle_text_message(connection, message)
-            elif isinstance(message, VoiceMessage):
-                return await self.handle_voice_message(connection, message)
+            if isinstance(message, (TextMessage, VoiceMessage)):
+                # For chat messages, broadcast to everyone including the sender
+                return await self.broadcast_chat_message(connection, message)
             elif isinstance(message, TypingMessage):
+                # For typing indicators, broadcast to others
                 return await self.handle_typing_message(connection, message)
             else:
                 await self.connection_manager.send_error(

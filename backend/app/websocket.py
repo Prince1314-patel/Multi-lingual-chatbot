@@ -145,6 +145,8 @@ async def websocket_chat_endpoint(
     
     try:
         # Accept WebSocket connection and join room with timeout handling
+        # Get or create room with error handling
+        room = room_mgr.get_or_create_room(room_id)
         try:
             connection = await conn_mgr.connect(websocket, room_id, user_id, client_ip)
             logger.log_connection_event("established", user_id, room_id, {
@@ -158,17 +160,6 @@ async def websocket_chat_endpoint(
                 str(e), user_id, room_id
             )
             return
-        except Exception as e:
-            await error_handler.handle_websocket_error(
-                websocket, ErrorCode.CONNECTION_FAILED,
-                f"Failed to establish connection: {str(e)}",
-                user_id, room_id, e
-            )
-            return
-        
-        # Get or create room with error handling
-        try:
-            room = room_mgr.get_or_create_room(room_id)
         except Exception as e:
             await error_handler.handle_websocket_error(
                 websocket, ErrorCode.ROOM_NOT_FOUND,
@@ -207,62 +198,9 @@ async def websocket_chat_endpoint(
                 message_start_time = time.time()
                 message = await websocket.receive()
                 
-                if message["type"] == "websocket.receive":
-                    if "text" in message:
-                        # Handle text message (JSON) with detailed error handling
-                        try:
-                            message_data = json.loads(message["text"])
-                            success = await msg_handler.handle_message(websocket, message_data)
-                            
-                            processing_time = (time.time() - message_start_time) * 1000
-                            logger.log_performance("text_message_processing", processing_time, user_id, room_id)
-                            
-                            if not success:
-                                logger.log_warning(
-                                    "Text message processing failed", user_id, room_id
-                                )
-                                
-                        except json.JSONDecodeError as e:
-                            await error_handler.handle_websocket_error(
-                                websocket, ErrorCode.INVALID_JSON,
-                                f"Invalid JSON format: {str(e)}",
-                                user_id, room_id, e
-                            )
-                            
-                        except Exception as e:
-                            await error_handler.handle_websocket_error(
-                                websocket, ErrorCode.MESSAGE_PROCESSING_ERROR,
-                                f"Failed to process text message: {str(e)}",
-                                user_id, room_id, e
-                            )
-                            
-                    elif "bytes" in message:
-                        # Handle binary message (voice data) with error handling
-                        try:
-                            binary_data = message["bytes"]
-                            success = await msg_handler.handle_binary_message(websocket, binary_data)
-                            
-                            processing_time = (time.time() - message_start_time) * 1000
-                            logger.log_performance("binary_message_processing", processing_time, user_id, room_id)
-                            
-                            if not success:
-                                logger.log_warning(
-                                    "Binary message processing failed", user_id, room_id
-                                )
-                                
-                        except Exception as e:
-                            await error_handler.handle_websocket_error(
-                                websocket, ErrorCode.BINARY_MESSAGE_PROCESSING_ERROR,
-                                f"Failed to process binary message: {str(e)}",
-                                user_id, room_id, e
-                            )
-                    
-                    else:
-                        await error_handler.handle_websocket_error(
-                            websocket, ErrorCode.INVALID_MESSAGE_FORMAT,
-                            "Message must contain text or binary data",
-                            user_id, room_id
-                        )
+                if message.get("type") == "websocket.disconnect":
+                    logger.log_connection_event("disconnected", user_id, room_id)
+                    break
                 
             except WebSocketDisconnect:
                 logger.log_connection_event("disconnected", user_id, room_id)
