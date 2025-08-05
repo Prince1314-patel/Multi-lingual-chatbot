@@ -400,7 +400,9 @@ class TestErrorRecovery:
     async def test_connection_cleanup_on_multiple_failures(self, room_manager):
         """Test that connections are properly cleaned up after multiple failures"""
         # Create a fresh connection manager for this test
-        connection_manager = ConnectionManager(room_manager)
+        from app.services.rate_limiter import RateLimiter, RateLimitConfig
+        rate_limiter = RateLimiter(RateLimitConfig())
+        connection_manager = ConnectionManager(rate_limiter)
         room_id = "test-room"
         
         # Create multiple failing connections
