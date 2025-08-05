@@ -28,15 +28,15 @@ class MockWebSocket:
 
 
 @pytest.fixture
-def connection_manager():
-    """Create a ConnectionManager"""
-    return ConnectionManager()
-
-
-@pytest.fixture
 def room_manager():
     """Create a RoomManager"""
     return RoomManager()
+
+
+@pytest.fixture
+def connection_manager(room_manager):
+    """Create a ConnectionManager"""
+    return ConnectionManager(room_manager)
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ def mock_connection():
     connection = ConnectionInfo(
         websocket=ws,
         user_id="test_user_123",
-        room_id="test_room_456"
+        room_id="test-room-456"
     )
     return connection
 
@@ -64,7 +64,7 @@ def mock_connection2():
     connection = ConnectionInfo(
         websocket=ws,
         user_id="test_user_789",
-        room_id="test_room_456"
+        room_id="test-room-456"
     )
     return connection
 
@@ -75,13 +75,13 @@ async def test_typing_indicator_broadcasting_logic(message_handler, mock_connect
     # Create typing message
     typing_message = TypingMessage(
         user_id="test_user_123",
-        room_id="test_room_456",
+        room_id="test-room-456",
         is_typing=True
     )
     
     # Mock dependencies
     message_handler.connection_manager.broadcast_to_room = AsyncMock(return_value=2)
-    message_handler.room_manager.get_room = Mock(return_value=Room(room_id="test_room_456"))
+    message_handler.room_manager.get_room = Mock(return_value=Room(room_id="test-room-456"))
     
     # Handle typing message
     result = await message_handler.handle_typing_message(mock_connection, typing_message)
@@ -95,7 +95,7 @@ async def test_typing_indicator_broadcasting_logic(message_handler, mock_connect
     # Verify broadcast was called with correct parameters
     message_handler.connection_manager.broadcast_to_room.assert_called_once()
     call_args = message_handler.connection_manager.broadcast_to_room.call_args
-    assert call_args[0][0] == "test_room_456"  # room_id
+    assert call_args[0][0] == "test-room-456"  # room_id
     assert call_args[1]['exclude_user'] == "test_user_123"  # exclude sender
 
 
@@ -119,7 +119,7 @@ async def test_typing_timeout_after_3_seconds(message_handler, mock_connection):
     # Verify typing was automatically set to false
     assert mock_connection.is_typing is False
     
-    # Verify broadcast was called to notify other users
+    # Verify broadcast was called to notify others
     message_handler.connection_manager.broadcast_to_room.assert_called_once()
     
     # Verify the broadcast message was a typing stop message
@@ -162,7 +162,7 @@ async def test_typing_timeout_cancellation_on_new_typing(message_handler, mock_c
 @pytest.mark.asyncio
 async def test_typing_indicator_aggregation_multiple_users(connection_manager, room_manager, message_handler):
     """Test typing indicator aggregation for multiple users"""
-    room_id = "test_room_456"
+    room_id = "test-room-456"
     
     # Create multiple connections using connection manager
     # This will create the room in connection manager, not room manager
@@ -206,7 +206,7 @@ async def test_typing_cleared_on_message_send(message_handler, mock_connection):
     # Send a text message
     text_message = TextMessage(
         user_id="test_user_123",
-        room_id="test_room_456",
+        room_id="test-room-456",
         content="Hello world!"
     )
     
@@ -254,16 +254,16 @@ async def test_typing_timeout_room_cleanup(message_handler):
     ws1 = MockWebSocket()
     ws2 = MockWebSocket()
     
-    conn1 = ConnectionInfo(websocket=ws1, user_id="user1", room_id="room1")
-    conn2 = ConnectionInfo(websocket=ws2, user_id="user2", room_id="room2")
+    conn1 = ConnectionInfo(websocket=ws1, user_id="user1", room_id="test-room-1")
+    conn2 = ConnectionInfo(websocket=ws2, user_id="user2", room_id="test-room-2")
     
     # Set up typing timeouts for both users
     await message_handler._manage_typing_timeout(conn1, True)
     await message_handler._manage_typing_timeout(conn2, True)
     
     # Verify both rooms have timeouts
-    assert "room1" in message_handler.typing_timeouts
-    assert "room2" in message_handler.typing_timeouts
+    assert "test-room-1" in message_handler.typing_timeouts
+    assert "test-room-2" in message_handler.typing_timeouts
     
     # Mock broadcast method
     message_handler.connection_manager.broadcast_to_room = AsyncMock()
@@ -272,8 +272,8 @@ async def test_typing_timeout_room_cleanup(message_handler):
     await message_handler.handle_user_disconnect(conn1)
     
     # Verify room1 was cleaned up but room2 remains
-    assert "room1" not in message_handler.typing_timeouts
-    assert "room2" in message_handler.typing_timeouts
+    assert "test-room-1" not in message_handler.typing_timeouts
+    assert "test-room-2" in message_handler.typing_timeouts
 
 
 @pytest.mark.asyncio
@@ -282,13 +282,13 @@ async def test_typing_indicator_no_persistent_storage(message_handler, mock_conn
     # Create typing message
     typing_message = TypingMessage(
         user_id="test_user_123",
-        room_id="test_room_456",
+        room_id="test-room-456",
         is_typing=True
     )
     
     # Mock dependencies
     message_handler.connection_manager.broadcast_to_room = AsyncMock(return_value=1)
-    message_handler.room_manager.get_room = Mock(return_value=Room(room_id="test_room_456"))
+    message_handler.room_manager.get_room = Mock(return_value=Room(room_id="test-room-456"))
     
     # Handle typing message
     await message_handler.handle_typing_message(mock_connection, typing_message)
@@ -313,7 +313,7 @@ async def test_concurrent_typing_timeouts(message_handler):
         conn = ConnectionInfo(
             websocket=ws,
             user_id=f"user_{i}",
-            room_id="test_room"
+            room_id="test-room"
         )
         connections.append(conn)
     
@@ -330,15 +330,15 @@ async def test_concurrent_typing_timeouts(message_handler):
     await asyncio.gather(*tasks)
     
     # Verify all timeouts were created
-    assert "test_room" in message_handler.typing_timeouts
-    assert len(message_handler.typing_timeouts["test_room"]) == 5
+    assert "test-room" in message_handler.typing_timeouts
+    assert len(message_handler.typing_timeouts["test-room"]) == 5
     
     # Stop typing for some users
     for i in range(3):
         await message_handler._manage_typing_timeout(connections[i], False)
     
     # Verify partial cleanup
-    assert len(message_handler.typing_timeouts["test_room"]) == 2
+    assert len(message_handler.typing_timeouts["test-room"]) == 2
 
 
 @pytest.mark.asyncio
@@ -393,15 +393,15 @@ async def test_typing_indicator_room_isolation(connection_manager, room_manager,
     ws1 = MockWebSocket()
     ws2 = MockWebSocket()
     
-    conn1 = await connection_manager.connect(ws1, "room1", "user1")
-    conn2 = await connection_manager.connect(ws2, "room2", "user2")
+    conn1 = await connection_manager.connect(ws1, "test-room-1", "user1")
+    conn2 = await connection_manager.connect(ws2, "test-room-2", "user2")
     
     # Set user1 as typing in room1
     conn1.set_typing(True)
     
     # Get typing users directly from connection manager rooms
-    room1 = connection_manager.get_room("room1")
-    room2 = connection_manager.get_room("room2")
+    room1 = connection_manager.get_room("test-room-1")
+    room2 = connection_manager.get_room("test-room-2")
     
     typing_room1 = room1.get_typing_users() if room1 else set()
     typing_room2 = room2.get_typing_users() if room2 else set()
@@ -415,7 +415,7 @@ async def test_typing_indicator_room_isolation(connection_manager, room_manager,
 @pytest.mark.asyncio
 async def test_expired_typing_indicator_cleanup(connection_manager, room_manager):
     """Test cleanup of expired typing indicators"""
-    room_id = "test_room"
+    room_id = "test-room"
     
     # Create connection using connection manager
     ws = MockWebSocket()
