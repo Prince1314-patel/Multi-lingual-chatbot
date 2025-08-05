@@ -26,15 +26,13 @@ logger = get_chat_logger()
 class ConnectionManager:
     """Manages WebSocket connections and message broadcasting"""
     
-    def __init__(self, room_manager, rate_limiter: Optional[RateLimiter] = None):
+    def __init__(self, rate_limiter: Optional[RateLimiter] = None):
         # Dictionary mapping room_id -> Room objects
         self.rooms: Dict[str, Room] = {}
         # Dictionary mapping websocket -> ConnectionInfo for quick lookup
         self.connection_lookup: Dict[WebSocket, ConnectionInfo] = {}
         # Rate limiter for connection and message limits
         self.rate_limiter = rate_limiter
-        # Store room manager reference
-        self.room_manager = room_manager
     
     async def connect(self, websocket: WebSocket, room_id: str, user_id: Optional[str] = None, 
                      ip_address: Optional[str] = None) -> ConnectionInfo:
@@ -81,9 +79,6 @@ class ConnectionManager:
         # Create room if it doesn't exist
         if room_id not in self.rooms:
             self.rooms[room_id] = Room(room_id=room_id)
-            # Ensure room is also created in RoomManager
-            if not self.room_manager.get_room(room_id):
-                self.room_manager.create_room(room_id)
         
         # Add connection to room and lookup table
         self.rooms[room_id].add_connection(connection)
