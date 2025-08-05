@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi import WebSocket
 
 from app.services.connection_manager import ConnectionManager
+from app.services.room_manager import RoomManager
 from app.models import UserJoinMessage, UserLeaveMessage
 
 
@@ -11,8 +12,12 @@ class TestUserNotifications:
     """Test user join/leave notification functionality"""
     
     @pytest.fixture
-    def connection_manager(self):
-        return ConnectionManager()
+    def room_manager(self):
+        return RoomManager()
+
+    @pytest.fixture
+    def connection_manager(self, room_manager):
+        return ConnectionManager(room_manager)
     
     @pytest.fixture
     def mock_websocket(self):
@@ -178,12 +183,12 @@ class TestUserNotifications:
         import json
         
         # Test UserJoinMessage serialization
-        join_msg = UserJoinMessage(user_id="test_user", room_id="test_room")
+        join_msg = UserJoinMessage(user_id="test_user", room_id="test-room")
         serialized_join = serialize_message(join_msg)
         
         assert serialized_join["type"] == "user_join"
         assert serialized_join["user_id"] == "test_user"
-        assert serialized_join["room_id"] == "test_room"
+        assert serialized_join["room_id"] == "test-room"
         assert "timestamp" in serialized_join
         
         # Verify it can be JSON serialized
@@ -191,12 +196,12 @@ class TestUserNotifications:
         assert json_str is not None
         
         # Test UserLeaveMessage serialization
-        leave_msg = UserLeaveMessage(user_id="test_user", room_id="test_room")
+        leave_msg = UserLeaveMessage(user_id="test_user", room_id="test-room")
         serialized_leave = serialize_message(leave_msg)
         
         assert serialized_leave["type"] == "user_leave"
         assert serialized_leave["user_id"] == "test_user"
-        assert serialized_leave["room_id"] == "test_room"
+        assert serialized_leave["room_id"] == "test-room"
         assert "timestamp" in serialized_leave
         
         # Verify it can be JSON serialized
