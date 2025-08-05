@@ -17,7 +17,9 @@ class TestUserNotifications:
 
     @pytest.fixture
     def connection_manager(self, room_manager):
-        return ConnectionManager(room_manager)
+        from app.services.rate_limiter import RateLimiter, RateLimitConfig
+        rate_limiter = RateLimiter(RateLimitConfig())
+        return ConnectionManager(rate_limiter)
     
     @pytest.fixture
     def mock_websocket(self):
