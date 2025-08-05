@@ -24,7 +24,7 @@ This document outlines best practices, architectural decisions, and coding stand
   - **App:** Root component managing routing and context providers.  
   - **RoomJoin:** Component to enter or generate a chat room link.  
   - **ChatWindow:** Displays messages and controls message sending with voice message support.  
-  - **MessageBubble:** Renders individual text and voice messages with integrated audio playback controls.  
+  - **MessageBubble:** Renders individual text and voice messages with integrated audio playback controls, message status indicators, and retry functionality for failed messages.  
   - **InputBar:** Text input box and voice recording with MediaRecorder API integration.  
   - **TypingIndicator:** Shows when other users are typing.  
   - **LanguageSelector:** Allows users to choose preferred language(s).  
@@ -49,7 +49,7 @@ This document outlines best practices, architectural decisions, and coding stand
 - **State Management:**  
   - Use Context or Redux to store global states such as user language preference and WebSocket connection status.  
   - Local component state only for transient UI state.  
-- **Error Handling:** Gracefully handle network errors or API failures with user-friendly messages and retry options.  
+- **Error Handling:** Gracefully handle network errors or API failures with user-friendly messages, retry options, and visual status indicators for message delivery states.  
 - **Performance:**  
   - Virtualize long message lists with libraries like `react-window`.  
   - Debounce rapid input events if applicable.  
@@ -67,6 +67,8 @@ This document outlines best practices, architectural decisions, and coding stand
   - Show timestamps for messages.  
   - Distinguish between original and translated messages visually (different bubbles or colors).  
   - Support inline playback and pause of voice messages.  
+  - Display message delivery status with visual indicators (sending, sent, delivered, failed, read).
+  - Provide retry functionality for failed messages with clear error states.
   - Show live status ("Transcribing...", "Translating...", "Synthesizing...") in the UI.
 
 - **Mobile Responsiveness:**  
@@ -80,8 +82,10 @@ This document outlines best practices, architectural decisions, and coding stand
 - Maintain a single WebSocket connection per chat room session with binary message support.  
 - Use JSON message format with clear types (e.g., text, voice, typing, user_join, user_leave, error).  
 - Support binary WebSocket messages for efficient voice data transmission.  
+- Implement message tracking with unique IDs and delivery status updates.
 - Manage reconnection logic and show connection status to users.  
-- Handle both JSON-encoded audio data and binary audio data formats.  
+- Handle both JSON-encoded audio data and binary audio data formats.
+- Provide retry mechanisms for failed message delivery.  
 
 ---
 

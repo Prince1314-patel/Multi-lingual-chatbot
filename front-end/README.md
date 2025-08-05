@@ -211,12 +211,13 @@ The application includes comprehensive voice message functionality:
 - **Progress Visualization**: Audio progress bar with current time and duration display
 - **Automatic Audio Management**: Proper cleanup of audio URLs and event listeners
 - **Error Handling**: Graceful handling of audio loading and playback errors
+- **Message Status Display**: Visual status indicators with retry functionality for failed messages
 - **Responsive Design**: Voice message bubbles adapt to current user vs. other user styling
 
 ### WebSocket Voice Transmission
 - **Binary Data Support**: Efficient transmission of audio data via WebSocket binary messages
 - **Dual Format Support**: Handles both binary WebSocket messages and JSON-encoded audio data
-- **Message Status Tracking**: Visual indicators for sending, sent, and failed voice messages
+- **Message Status Tracking**: Visual indicators for sending, sent, delivered, failed, and read message states with retry functionality
 - **Connection State Awareness**: Prevents voice message sending when disconnected
 
 ### Technical Implementation Details
@@ -230,13 +231,24 @@ The application includes comprehensive voice message functionality:
 #### Voice Message Types
 ```typescript
 interface VoiceMessage {
+  id?: string;
   from: string;
   to: string;
   type: 'voice';
   audioData: ArrayBuffer;
   duration?: number;
   timestamp: string;
-  status: "sending" | "sent" | "delivered" | "read";
+  status: "sending" | "sent" | "delivered" | "failed" | "read";
+}
+
+interface Message {
+  id?: string;
+  from: string;
+  to: string;
+  text?: string;
+  lang: string;
+  timestamp: string;
+  status: "sending" | "sent" | "delivered" | "failed" | "read";
 }
 ```
 
@@ -247,9 +259,32 @@ interface VoiceMessage {
 
 ### Chat Components
 - **ChatWindow**: Main container managing WebSocket connection and message state with voice message support
-- **MessageBubble**: Displays individual text and voice messages with playback controls and translation support
+- **MessageBubble**: Displays individual text and voice messages with playback controls, message status indicators, and retry functionality for failed messages
 - **InputBar**: Handles text input and voice recording with MediaRecorder API integration
 - **TypingIndicator**: Shows when other users are typing
+
+### Message Delivery & Status Tracking
+
+The application provides comprehensive message delivery tracking with visual feedback:
+
+#### Message Status States
+- **Sending**: Message is being transmitted to the server
+- **Sent**: Message successfully received by server
+- **Delivered**: Message delivered to recipient(s)
+- **Failed**: Message transmission failed
+- **Read**: Message has been read by recipient (future feature)
+
+#### Retry Functionality
+- Failed messages display a retry button alongside the error indicator
+- Users can manually retry failed message transmission
+- Retry functionality is available for both text and voice messages
+- Visual feedback distinguishes between different failure states
+
+#### Implementation Details
+- Messages include optional `id` field for tracking and deduplication
+- Status updates are handled through WebSocket message confirmations
+- Optimistic UI updates provide immediate feedback while awaiting server confirmation
+- Error states include user-friendly messaging and actionable retry options
 
 ## 🔗 Routing
 

@@ -5,7 +5,8 @@ A Progressive Web Application (PWA) that enables real-time multilingual communic
 ## 🚀 Features
 
 - **Room-based Chat**: Unique, shareable links for instant room access
-- **Real-time Messaging**: WebSocket-powered text and voice communication
+- **Real-time Messaging**: WebSocket-powered text and voice communication with delivery confirmation
+- **Message Status Tracking**: Visual indicators for message delivery states with retry functionality
 - **AI-powered Translation**: Groq Llama-3.3-70B-Versatile for multilingual text translation
 - **Voice Processing**: OpenAI Whisper (ASR), Coqui TTS, and Chatterbox TTS for voice cloning
 - **Dual-language Display**: Original and translated messages shown side-by-side

@@ -1,25 +1,27 @@
-import { Check, CheckCheck, Clock, Play, Pause, Volume2 } from "lucide-react";
+import { Check, CheckCheck, Clock, Play, Pause, Volume2, AlertCircle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useState, useRef, useEffect } from "react";
 
 export interface Message {
+  id?: string;
   from: string;
   to: string;
   text?: string;
   lang: string;
   timestamp: string;
-  status: "sending" | "sent" | "delivered" | "read";
+  status: "sending" | "sent" | "delivered" | "failed" | "read";
 }
 
 export interface VoiceMessage {
+  id?: string;
   from: string;
   to: string;
   type: 'voice';
   audioData: ArrayBuffer;
   duration?: number;
   timestamp: string;
-  status: "sending" | "sent" | "delivered" | "read";
+  status: "sending" | "sent" | "delivered" | "failed" | "read";
 }
 
 export interface SystemMessage {
@@ -32,9 +34,10 @@ interface MessageBubbleProps {
   message: Message | VoiceMessage | SystemMessage;
   isCurrentUser?: boolean;
   showTimestamp?: boolean;
+  onRetry?: (message: Message | VoiceMessage) => void;
 }
 
-export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = false }: MessageBubbleProps) => {
+export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = false, onRetry }: MessageBubbleProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -55,12 +58,29 @@ export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = 
     if ('status' in message) {
       switch (message.status) {
         case "sending":
-          return <Clock className="h-3 w-3 text-message-sending" />;
+          return <Clock className="h-3 w-3 text-message-sending" data-testid="status-icon" />;
         case "sent":
-          return <Check className="h-3 w-3 text-message-sent" />;
+          return <Check className="h-3 w-3 text-message-sent" data-testid="status-icon" />;
         case "delivered":
         case "read":
-          return <CheckCheck className="h-3 w-3 text-message-sent" />;
+          return <CheckCheck className="h-3 w-3 text-message-sent" data-testid="status-icon" />;
+        case "failed":
+          return (
+            <div className="flex items-center gap-1" data-testid="status-icon">
+              <AlertCircle className="h-3 w-3 text-destructive" />
+              {onRetry && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-4 w-4 p-0 hover:bg-background/20"
+                  onClick={() => onRetry(message as Message | VoiceMessage)}
+                  data-testid="retry-button"
+                >
+                  <RotateCcw className="h-2 w-2" />
+                </Button>
+              )}
+            </div>
+          );
         default:
           return null;
       }

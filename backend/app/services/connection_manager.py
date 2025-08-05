@@ -14,6 +14,7 @@ from ..models import (
     ErrorMessage,
     UserJoinMessage,
     UserLeaveMessage,
+    MessageDeliveryConfirmation,
     generate_user_id
 )
 from ..core import ErrorCode, ChatLogger, get_chat_logger
@@ -183,7 +184,7 @@ class ConnectionManager:
             )
             return False
     
-    async def broadcast_to_room(self, room_id: str, message: MessageType, exclude_user: Optional[str] = None) -> int:
+    async def broadcast_to_room(self, room_id: str, message: MessageType, exclude_user: Optional[str] = None, send_confirmation: bool = False) -> int:
         """
         Broadcast a message to all connections in a room with enhanced error handling
         
@@ -191,6 +192,7 @@ class ConnectionManager:
             room_id: The room to broadcast to
             message: The message to broadcast
             exclude_user: Optional user ID to exclude from broadcast
+            send_confirmation: Whether to send delivery confirmation back to sender
             
         Returns:
             Number of connections the message was successfully sent to
@@ -239,6 +241,31 @@ class ConnectionManager:
                     user_id, room_id, e
                 )
                 failed_connections.append(connection.websocket)
+        
+        # Send delivery confirmation back to sender if requested and message has ID
+        if send_confirmation and hasattr(message, 'id') and hasattr(message, 'user_id') and exclude_user:
+            sender_connection = None
+            for user_id, connection in connections.items():
+                if user_id == exclude_user:
+                    sender_connection = connection
+                    break
+            
+            if sender_connection:
+                confirmation_status = "delivered" if successful_sends > 0 else "failed"
+                confirmation = MessageDeliveryConfirmation(
+                    message_id=message.id,
+                    status=confirmation_status,
+                    user_id=message.user_id,
+                    room_id=room_id
+                )
+                try:
+                    await self.send_message(sender_connection.websocket, confirmation)
+                except Exception as e:
+                    logger.log_error(
+                        ErrorCode.MESSAGE_PROCESSING_ERROR,
+                        f"Failed to send delivery confirmation: {str(e)}",
+                        exclude_user, room_id, e
+                    )
         
         # Clean up failed connections (don't broadcast leave messages during cleanup)
         cleanup_count = 0

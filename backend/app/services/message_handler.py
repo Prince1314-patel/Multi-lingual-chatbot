@@ -13,6 +13,7 @@ from ..models import (
     TypingMessage,
     UserJoinMessage,
     UserLeaveMessage,
+    MessageDeliveryConfirmation,
     ErrorMessage,
     deserialize_message,
     serialize_message
@@ -138,9 +139,9 @@ class MessageHandler:
             # Update connection activity
             connection.update_activity()
             
-            # Broadcast to all users in the room
+            # Broadcast to all users in the room with delivery confirmation
             sent_count = await self.connection_manager.broadcast_to_room(
-                connection.room_id, voice_message
+                connection.room_id, voice_message, exclude_user=connection.user_id, send_confirmation=True
             )
             
             logger.info(f"Binary voice message from {connection.user_id} ({len(binary_data)} bytes) broadcasted to {sent_count} users in room {connection.room_id}")
@@ -179,9 +180,9 @@ class MessageHandler:
             message.user_id = connection.user_id
             message.room_id = connection.room_id
             
-            # Broadcast to all users in the room
+            # Broadcast to all users in the room with delivery confirmation
             sent_count = await self.connection_manager.broadcast_to_room(
-                connection.room_id, message
+                connection.room_id, message, exclude_user=connection.user_id, send_confirmation=True
             )
             
             logger.info(f"Text message from {connection.user_id} broadcasted to {sent_count} users in room {connection.room_id}")
@@ -232,9 +233,9 @@ class MessageHandler:
             message.user_id = connection.user_id
             message.room_id = connection.room_id
             
-            # Broadcast to all users in the room
+            # Broadcast to all users in the room with delivery confirmation
             sent_count = await self.connection_manager.broadcast_to_room(
-                connection.room_id, message
+                connection.room_id, message, exclude_user=connection.user_id, send_confirmation=True
             )
             
             logger.info(f"Voice message from {connection.user_id} broadcasted to {sent_count} users in room {connection.room_id}")

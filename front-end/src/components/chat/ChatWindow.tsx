@@ -52,12 +52,24 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
   function handleWebSocketMessage(data: WebSocketMessage) {
     debugLog('Received WebSocket message:', data);
     
-    if (data.type === 'typing') {
+    if (data.type === 'message_confirmation') {
+      // Handle delivery confirmation
+      const messageId = data.message_id;
+      const status = data.status === 'delivered' ? 'delivered' : 'failed';
+      
+      setMessages(prev => prev.map(msg => {
+        if ('id' in msg && msg.id === messageId && msg.from === currentUser) {
+          return { ...msg, status };
+        }
+        return msg;
+      }));
+    } else if (data.type === 'typing') {
       if (data.from !== currentUser) {
         setIsOtherUserTyping(data.isTyping);
       }
     } else if (data.type === 'message' || data.type === 'text') {
       const message: Message = {
+        id: data.id,
         from: data.from || data.user_id,
         to: data.to || otherUser,
         text: data.text || data.content,
@@ -80,6 +92,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
           ).buffer;
           
           const voiceMessage: VoiceMessage = {
+            id: data.id,
             from: data.user_id,
             to: otherUser,
             type: 'voice',
@@ -187,6 +200,10 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
     scrollToBottom();
   }, [messages, isOtherUserTyping]);
 
+  const generateMessageId = () => {
+    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
   const sendMessage = (text: string) => {
     if (!isConnected) {
       debugLog('Cannot send message: WebSocket is not connected');
@@ -198,7 +215,9 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
       return;
     }
 
+    const messageId = generateMessageId();
     const message: Message = {
+      id: messageId,
       from: currentUser,
       to: otherUser,
       text,
@@ -212,29 +231,22 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
 
     // Send to WebSocket using the backend's expected format
     const success = sendWebSocketMessage({
+      id: messageId,
       type: 'text',
       user_id: currentUser,
       room_id: roomId,
       content: text
     });
 
-    if (success) {
-      // Update status to sent (optimistic update)
-      setTimeout(() => {
-        setMessages(prev => prev.map(msg => 
-          msg.timestamp === message.timestamp && msg.from === currentUser
-            ? { ...msg, status: 'sent' as const }
-            : msg
-        ));
-      }, 500);
-    } else {
-      // Update status to failed
+    if (!success) {
+      // Update status to failed immediately if WebSocket send failed
       setMessages(prev => prev.map(msg => 
-        msg.timestamp === message.timestamp && msg.from === currentUser
+        msg.id === messageId && msg.from === currentUser
           ? { ...msg, status: 'failed' as const }
           : msg
       ));
     }
+    // Note: Status will be updated to 'delivered' or 'failed' when confirmation is received
   };
 
   const sendVoiceMessage = async (audioBlob: Blob) => {
@@ -252,8 +264,10 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
       // Convert blob to ArrayBuffer
       const arrayBuffer = await audioBlob.arrayBuffer();
       
+      const messageId = generateMessageId();
       // Create voice message for UI
       const voiceMessage: VoiceMessage = {
+        id: messageId,
         from: currentUser,
         to: otherUser,
         type: 'voice',
@@ -268,23 +282,15 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
       // Send binary data via WebSocket
       const success = sendWebSocketBinaryMessage && sendWebSocketBinaryMessage(arrayBuffer);
 
-      if (success) {
-        // Update status to sent (optimistic update)
-        setTimeout(() => {
-          setMessages(prev => prev.map(msg => 
-            msg.timestamp === voiceMessage.timestamp && msg.from === currentUser
-              ? { ...msg, status: 'sent' as const }
-              : msg
-          ));
-        }, 500);
-      } else {
-        // Update status to failed
+      if (!success) {
+        // Update status to failed immediately if WebSocket send failed
         setMessages(prev => prev.map(msg => 
-          msg.timestamp === voiceMessage.timestamp && msg.from === currentUser
+          msg.id === messageId && msg.from === currentUser
             ? { ...msg, status: 'failed' as const }
             : msg
         ));
       }
+      // Note: Status will be updated to 'delivered' or 'failed' when confirmation is received
     } catch (error) {
       console.error('Error sending voice message:', error);
       setConnectionError({
@@ -292,6 +298,50 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
         message: 'Failed to send voice message',
         timestamp: new Date().toISOString()
       });
+    }
+  };
+
+  const retryMessage = (failedMessage: Message | VoiceMessage) => {
+    if (!isConnected) {
+      debugLog('Cannot retry message: WebSocket is not connected');
+      return;
+    }
+
+    // Update message status to sending
+    setMessages(prev => prev.map(msg => 
+      msg.id === failedMessage.id && msg.from === currentUser
+        ? { ...msg, status: 'sending' as const }
+        : msg
+    ));
+
+    if ('type' in failedMessage && failedMessage.type === 'voice') {
+      // Retry voice message
+      const success = sendWebSocketBinaryMessage && sendWebSocketBinaryMessage(failedMessage.audioData);
+      if (!success) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === failedMessage.id && msg.from === currentUser
+            ? { ...msg, status: 'failed' as const }
+            : msg
+        ));
+      }
+    } else {
+      // Retry text message
+      const textMessage = failedMessage as Message;
+      const success = sendWebSocketMessage({
+        id: textMessage.id,
+        type: 'text',
+        user_id: currentUser,
+        room_id: roomId,
+        content: textMessage.text || ''
+      });
+      
+      if (!success) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === failedMessage.id && msg.from === currentUser
+            ? { ...msg, status: 'failed' as const }
+            : msg
+        ));
+      }
     }
   };
 
@@ -395,6 +445,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
                 message={message}
                 isCurrentUser={isCurrentUser}
                 showTimestamp={showTimestamp}
+                onRetry={isCurrentUser ? retryMessage : undefined}
               />
             );
           })}
