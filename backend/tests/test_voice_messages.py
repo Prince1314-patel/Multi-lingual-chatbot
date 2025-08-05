@@ -20,15 +20,15 @@ def mock_websocket():
 
 
 @pytest.fixture
-def connection_manager():
-    """Create a ConnectionManager instance for testing"""
-    return ConnectionManager()
-
-
-@pytest.fixture
 def room_manager():
     """Create a RoomManager instance for testing"""
     return RoomManager()
+
+
+@pytest.fixture
+def connection_manager(room_manager):
+    """Create a ConnectionManager instance for testing"""
+    return ConnectionManager(room_manager)
 
 
 @pytest.fixture
@@ -43,7 +43,7 @@ def sample_connection(mock_websocket):
     return ConnectionInfo(
         websocket=mock_websocket,
         user_id="test_user",
-        room_id="test_room"
+        room_id="test-room"
     )
 
 
@@ -53,12 +53,12 @@ async def test_handle_binary_message_success(message_handler, connection_manager
     # Setup
     binary_data = b"fake_audio_data_12345"
     connection_manager.connection_lookup[mock_websocket] = sample_connection
-    connection_manager.rooms["test_room"] = MagicMock()
-    connection_manager.rooms["test_room"].get_all_connections.return_value = {
+    connection_manager.rooms["test-room"] = MagicMock()
+    connection_manager.rooms["test-room"].get_all_connections.return_value = {
         "test_user": sample_connection
     }
-    connection_manager.rooms["test_room"].update_activity = MagicMock()
-    connection_manager.rooms["test_room"].increment_message_count = MagicMock()
+    connection_manager.rooms["test-room"].update_activity = MagicMock()
+    connection_manager.rooms["test-room"].increment_message_count = MagicMock()
     
     # Mock broadcast_to_room to return success
     connection_manager.broadcast_to_room = AsyncMock(return_value=1)
@@ -77,7 +77,7 @@ async def test_handle_binary_message_success(message_handler, connection_manager
     assert isinstance(broadcasted_message, VoiceMessage)
     assert broadcasted_message.audio_data == binary_data
     assert broadcasted_message.user_id == "test_user"
-    assert broadcasted_message.room_id == "test_room"
+    assert broadcasted_message.room_id == "test-room"
     assert broadcasted_message.audio_format == "webm"
 
 
@@ -113,7 +113,7 @@ async def test_handle_binary_message_too_large(message_handler, connection_manag
     # Verify
     assert result is False
     connection_manager.send_error.assert_called_once_with(
-        mock_websocket, "BINARY_DATA_TOO_LARGE", "Binary data exceeds maximum size of 10485760 bytes"
+        mock_websocket, "BINARY_DATA_TOO_LARGE", f"Binary data exceeds maximum size of {10 * 1024 * 1024} bytes"
     )
 
 
@@ -141,7 +141,7 @@ async def test_send_voice_message_as_binary(connection_manager, mock_websocket):
     audio_data = b"test_audio_data_123"
     voice_message = VoiceMessage(
         user_id="test_user",
-        room_id="test_room",
+        room_id="test-room",
         audio_data=audio_data,
         audio_format="webm"
     )
@@ -161,7 +161,7 @@ async def test_send_voice_message_without_audio_data(connection_manager, mock_we
     # Setup
     voice_message = VoiceMessage(
         user_id="test_user",
-        room_id="test_room",
+        room_id="test-room",
         audio_data=None,
         audio_format="webm"
     )
@@ -179,7 +179,7 @@ async def test_send_voice_message_without_audio_data(connection_manager, mock_we
 async def test_broadcast_voice_message_to_room(connection_manager, room_manager):
     """Test broadcasting voice message to multiple users in room"""
     # Setup
-    room_id = "test_room"
+    room_id = "test-room"
     audio_data = b"broadcast_audio_test"
     
     # Create mock websockets and connections
@@ -224,7 +224,7 @@ async def test_voice_message_size_validation():
     audio_data = b"x" * 1024  # 1KB
     voice_message = VoiceMessage(
         user_id="test_user",
-        room_id="test_room",
+        room_id="test-room",
         audio_data=audio_data
     )
     assert voice_message.audio_data == audio_data
@@ -233,7 +233,7 @@ async def test_voice_message_size_validation():
     large_audio_data = b"x" * (5 * 1024 * 1024)  # 5MB
     large_voice_message = VoiceMessage(
         user_id="test_user",
-        room_id="test_room",
+        room_id="test-room",
         audio_data=large_audio_data
     )
     assert large_voice_message.audio_data == large_audio_data
@@ -248,7 +248,7 @@ async def test_voice_message_format_validation():
     for format_type in valid_formats:
         voice_message = VoiceMessage(
             user_id="test_user",
-            room_id="test_room",
+            room_id="test-room",
             audio_format=format_type
         )
         assert voice_message.audio_format == format_type
@@ -257,7 +257,7 @@ async def test_voice_message_format_validation():
     with pytest.raises(ValueError):
         VoiceMessage(
             user_id="test_user",
-            room_id="test_room",
+            room_id="test-room",
             audio_format="invalid_format"
         )
 
@@ -268,7 +268,7 @@ async def test_voice_message_duration_validation():
     # Test valid duration
     voice_message = VoiceMessage(
         user_id="test_user",
-        room_id="test_room",
+        room_id="test-room",
         duration=30.5
     )
     assert voice_message.duration == 30.5
@@ -276,7 +276,7 @@ async def test_voice_message_duration_validation():
     # Test maximum duration
     voice_message = VoiceMessage(
         user_id="test_user",
-        room_id="test_room",
+        room_id="test-room",
         duration=300.0
     )
     assert voice_message.duration == 300.0
@@ -285,7 +285,7 @@ async def test_voice_message_duration_validation():
     with pytest.raises(ValueError):
         VoiceMessage(
             user_id="test_user",
-            room_id="test_room",
+            room_id="test-room",
             duration=-1.0
         )
     
@@ -293,6 +293,6 @@ async def test_voice_message_duration_validation():
     with pytest.raises(ValueError):
         VoiceMessage(
             user_id="test_user",
-            room_id="test_room",
+            room_id="test-room",
             duration=301.0
         )
