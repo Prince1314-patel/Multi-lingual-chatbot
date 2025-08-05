@@ -68,7 +68,7 @@
   - Test backend startup and basic connectivity
   - _Requirements: 4.1, 4.2_
 
-- [ ] 11. Update frontend WebSocket URL configuration
+- [x] 11. Update frontend WebSocket URL configuration
   - Modify ChatWindow component to use configurable backend URL
   - Add environment variable support for backend WebSocket endpoint
   - Update connection error handling to match backend error responses
