@@ -15,9 +15,11 @@ class TestIntegrationUserNotifications:
     @pytest.fixture
     def services(self):
         """Create integrated service instances"""
+        from app.services.rate_limiter import RateLimiter, RateLimitConfig
+        rate_limiter = RateLimiter(RateLimitConfig())
         room_manager = RoomManager()
-        connection_manager = ConnectionManager(room_manager)
-        message_handler = MessageHandler(connection_manager, room_manager)
+        connection_manager = ConnectionManager(rate_limiter)
+        message_handler = MessageHandler(connection_manager, room_manager, rate_limiter)
         return connection_manager, room_manager, message_handler
     
     @pytest.fixture
