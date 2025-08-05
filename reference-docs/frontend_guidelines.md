@@ -29,6 +29,7 @@ This document outlines best practices, architectural decisions, and coding stand
   - **AudioPlayer:** For playing back received and synthesized voice messages.  
   - **LanguageSelector:** Allows users to choose preferred language(s).  
   - **ProgressIndicator:** Shows transcription/translation/TTS progress.  
+  - **ConfigTest:** Development component for testing and displaying configuration values.  
 
 - **Hooks:**  
   - Custom hooks for WebSocket connection and message handling (e.g., `useWebSocket`).  
@@ -98,12 +99,38 @@ This document outlines best practices, architectural decisions, and coding stand
 
 ---
 
+## Configuration Management
+
+- **Environment Variables:** Use Vite's `VITE_` prefixed environment variables for configuration.
+- **Configuration Module:** Centralized configuration in `src/lib/config.ts` with validation and fallbacks.
+- **Development Testing:** Use the `ConfigTest` component to verify configuration values during development.
+- **WebSocket URLs:** Dynamic URL generation for room-specific WebSocket connections.
+- **Debug Logging:** Configurable debug logging with automatic enablement in development mode.
+
+### Configuration Testing
+
+The `ConfigTest` component (`src/components/test/ConfigTest.tsx`) provides a visual interface for developers to:
+- Verify environment variable loading
+- Test WebSocket URL generation
+- Check API endpoint construction
+- Validate configuration values
+- Debug connection settings
+
+To use the ConfigTest component during development:
+```tsx
+import { ConfigTest } from '@/components/test/ConfigTest';
+
+// Add to any development page or component
+<ConfigTest />
+```
+
 ## Testing Guidelines
 
 - Write unit tests for components and hooks.  
 - Perform integration tests simulating full chat flows.  
 - Use mocks for WebSocket and AI service calls during tests.  
 - Test accessibility and mobile responsiveness manually or with automated tools.
+- Use the ConfigTest component to verify configuration during development and debugging.
 
 ---
 

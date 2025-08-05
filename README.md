@@ -54,12 +54,22 @@ A Progressive Web Application (PWA) that enables real-time multilingual communic
    npm install
    ```
 
-3. Start the development server:
+3. Configure environment variables (optional):
+   ```bash
+   cp .env.example .env.local
+   # Edit .env.local with your backend URLs
+   ```
+
+4. Start the development server:
    ```bash
    npm run dev
    ```
 
-4. Open your browser to `http://localhost:8080`
+5. Open your browser to `http://localhost:8080`
+
+6. Test configuration (development):
+   - Import and use the `ConfigTest` component to verify your setup
+   - Check WebSocket URLs and API endpoints are correctly configured
 
 ### Backend Setup (When Available)
 
@@ -156,6 +166,13 @@ CORS_ORIGINS=http://localhost:8080,http://localhost:3000
 cd front-end
 npm run test        # Run Jest tests (when implemented)
 npm run test:watch  # Run tests in watch mode
+```
+
+### Configuration Testing
+Use the built-in ConfigTest component during development:
+```tsx
+import { ConfigTest } from '@/components/test/ConfigTest';
+// Displays all configuration values and WebSocket URLs
 ```
 
 ### Backend Testing

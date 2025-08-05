@@ -75,7 +75,7 @@
   - Test frontend-backend WebSocket connection establishment
   - _Requirements: 2.5, 6.1_
 
-- [ ] 12. Implement user join/leave notifications
+- [-] 12. Implement user join/leave notifications
   - Add user connection/disconnection event broadcasting
   - Update frontend to display join/leave notifications in chat
   - Add user count display in chat room header
