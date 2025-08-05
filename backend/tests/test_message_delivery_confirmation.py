@@ -16,13 +16,13 @@ from app.models import (
 
 
 @pytest.fixture
-def connection_manager():
-    return ConnectionManager()
+def room_manager():
+    return RoomManager()
 
 
 @pytest.fixture
-def room_manager():
-    return RoomManager()
+def connection_manager(room_manager):
+    return ConnectionManager(room_manager)
 
 
 @pytest.fixture
@@ -43,14 +43,14 @@ def mock_connection(mock_websocket):
     connection = ConnectionInfo(
         websocket=mock_websocket,
         user_id="test_user",
-        room_id="test_room"
+        room_id="test-room"
     )
     return connection
 
 
 @pytest.fixture
 def mock_room():
-    return Room(room_id="test_room")
+    return Room(room_id="test-room")
 
 
 @pytest.mark.asyncio
@@ -59,7 +59,7 @@ async def test_text_message_delivery_confirmation(
 ):
     """Test that text messages generate delivery confirmations"""
     # Setup
-    connection_manager.rooms["test_room"] = mock_room
+    connection_manager.rooms["test-room"] = mock_room
     connection_manager.connection_lookup[mock_websocket] = mock_connection
     mock_room.add_connection(mock_connection)
     
@@ -69,7 +69,7 @@ async def test_text_message_delivery_confirmation(
     mock_connection2 = ConnectionInfo(
         websocket=mock_websocket2,
         user_id="test_user2",
-        room_id="test_room"
+        room_id="test-room"
     )
     connection_manager.connection_lookup[mock_websocket2] = mock_connection2
     mock_room.add_connection(mock_connection2)
@@ -78,7 +78,7 @@ async def test_text_message_delivery_confirmation(
     text_message = TextMessage(
         id="test_msg_123",
         user_id="test_user",
-        room_id="test_room",
+        room_id="test-room",
         content="Hello, world!"
     )
     
@@ -103,7 +103,7 @@ async def test_text_message_delivery_confirmation(
     assert confirmation_data["message_id"] == "test_msg_123"
     assert confirmation_data["status"] == "delivered"
     assert confirmation_data["user_id"] == "test_user"
-    assert confirmation_data["room_id"] == "test_room"
+    assert confirmation_data["room_id"] == "test-room"
 
 
 @pytest.mark.asyncio
@@ -112,7 +112,7 @@ async def test_voice_message_delivery_confirmation(
 ):
     """Test that voice messages generate delivery confirmations"""
     # Setup
-    connection_manager.rooms["test_room"] = mock_room
+    connection_manager.rooms["test-room"] = mock_room
     connection_manager.connection_lookup[mock_websocket] = mock_connection
     mock_room.add_connection(mock_connection)
     
@@ -122,7 +122,7 @@ async def test_voice_message_delivery_confirmation(
     mock_connection2 = ConnectionInfo(
         websocket=mock_websocket2,
         user_id="test_user2",
-        room_id="test_room"
+        room_id="test-room"
     )
     connection_manager.connection_lookup[mock_websocket2] = mock_connection2
     mock_room.add_connection(mock_connection2)
@@ -132,7 +132,7 @@ async def test_voice_message_delivery_confirmation(
     voice_message = VoiceMessage(
         id="test_voice_123",
         user_id="test_user",
-        room_id="test_room",
+        room_id="test-room",
         audio_data=audio_data,
         duration=5.0
     )
@@ -158,7 +158,7 @@ async def test_voice_message_delivery_confirmation(
     assert confirmation_data["message_id"] == "test_voice_123"
     assert confirmation_data["status"] == "delivered"
     assert confirmation_data["user_id"] == "test_user"
-    assert confirmation_data["room_id"] == "test_room"
+    assert confirmation_data["room_id"] == "test-room"
 
 
 @pytest.mark.asyncio
@@ -167,7 +167,7 @@ async def test_failed_delivery_confirmation(
 ):
     """Test that failed message delivery generates failed confirmation"""
     # Setup
-    connection_manager.rooms["test_room"] = mock_room
+    connection_manager.rooms["test-room"] = mock_room
     connection_manager.connection_lookup[mock_websocket] = mock_connection
     mock_room.add_connection(mock_connection)
     
@@ -177,7 +177,7 @@ async def test_failed_delivery_confirmation(
     mock_connection2 = ConnectionInfo(
         websocket=mock_websocket2,
         user_id="test_user2",
-        room_id="test_room"
+        room_id="test-room"
     )
     connection_manager.connection_lookup[mock_websocket2] = mock_connection2
     mock_room.add_connection(mock_connection2)
@@ -186,7 +186,7 @@ async def test_failed_delivery_confirmation(
     text_message = TextMessage(
         id="test_msg_456",
         user_id="test_user",
-        room_id="test_room",
+        room_id="test-room",
         content="Hello, world!"
     )
     
@@ -208,7 +208,7 @@ async def test_failed_delivery_confirmation(
     assert confirmation_data["message_id"] == "test_msg_456"
     assert confirmation_data["status"] == "failed"
     assert confirmation_data["user_id"] == "test_user"
-    assert confirmation_data["room_id"] == "test_room"
+    assert confirmation_data["room_id"] == "test-room"
 
 
 @pytest.mark.asyncio
