@@ -15,8 +15,8 @@ class TestIntegrationUserNotifications:
     @pytest.fixture
     def services(self):
         """Create integrated service instances"""
-        connection_manager = ConnectionManager()
         room_manager = RoomManager()
+        connection_manager = ConnectionManager(room_manager)
         message_handler = MessageHandler(connection_manager, room_manager)
         return connection_manager, room_manager, message_handler
     
@@ -160,23 +160,23 @@ class TestIntegrationUserNotifications:
         room2_ws1.send_text = AsyncMock()
         
         # Users join different rooms
-        await connection_manager.connect(room1_ws1, "room1", "user1")
-        await connection_manager.connect(room2_ws1, "room2", "user2")
+        await connection_manager.connect(room1_ws1, "test-room-1", "user1")
+        await connection_manager.connect(room2_ws1, "test-room-2", "user2")
         
         # Reset mocks
         room1_ws1.send_text.reset_mock()
         room2_ws1.send_text.reset_mock()
         
         # Another user joins room1 (should only notify users in room1)
-        await connection_manager.connect(room1_ws2, "room1", "user3")
+        await connection_manager.connect(room1_ws2, "test-room-1", "user3")
         
         # Verify notification only sent to room1 users
         room1_ws1.send_text.assert_called_once()  # user1 in room1 gets notification
         room2_ws1.send_text.assert_not_called()   # user2 in room2 gets no notification
         
         # Verify room stats are independent
-        assert connection_manager.get_room_connection_count("room1") == 2
-        assert connection_manager.get_room_connection_count("room2") == 1
+        assert connection_manager.get_room_connection_count("test-room-1") == 2
+        assert connection_manager.get_room_connection_count("test-room-2") == 1
     
     @pytest.mark.asyncio
     async def test_user_notification_message_format(self, services, mock_websocket, mock_websocket2):
