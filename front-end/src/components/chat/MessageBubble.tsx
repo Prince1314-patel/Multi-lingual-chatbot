@@ -22,7 +22,7 @@ export interface VoiceMessage {
   audioData: ArrayBuffer;
   duration?: number;
   timestamp: string;
-  status: "sending" | "sent" | "delivered" | "failed" | "read";
+  status?: "sending" | "sent" | "delivered" | "failed" | "read";
 }
 
 export interface SystemMessage {
@@ -46,7 +46,13 @@ export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // Ensure consistent local time formatting regardless of timestamp source
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true // Ensure consistent 12-hour format
+    });
   };
 
   const formatDuration = (seconds: number) => {

@@ -103,22 +103,23 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
             data.audio_data.match(/.{1,2}/g)?.map((byte: string) => parseInt(byte, 16)) || []
           ).buffer;
 
-          const voiceMessage: VoiceMessage = {
+          // Create voice message with conditional status
+          const baseVoiceMessage = {
             id: typeof data.id === 'string' ? data.id : '',
             from: data.user_id,
             to: otherUser,
-            type: 'voice',
+            type: 'voice' as const,
             audioData,
             duration: typeof data.duration === 'number' ? data.duration : undefined,
-            timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
-            status: 'sent'
+            timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString()
           };
 
-          // If this is from another user, add it to messages
-          if (voiceMessage.from !== currentUser) {
-            setMessages(prev => [...prev, voiceMessage]);
+          // If this is from another user, add it without status
+          if (baseVoiceMessage.from !== currentUser) {
+            setMessages(prev => [...prev, baseVoiceMessage]);
           } else {
-            // If this is our own message echoed back, update the existing message with server timestamp
+            // If this is our own message echoed back, include status and update existing message
+            const voiceMessage: VoiceMessage = { ...baseVoiceMessage, status: 'sent' as const };
             setMessages(prev => prev.map(msg =>
               'id' in msg && 'from' in msg && msg.id === voiceMessage.id && msg.from === currentUser
                 ? { ...msg, timestamp: voiceMessage.timestamp, status: 'sent' as const }
@@ -179,8 +180,8 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
       type: 'voice',
       audioData: data,
       duration: undefined, // Will be set when audio loads
-      timestamp: new Date().toISOString(),
-      status: 'sent'
+      timestamp: new Date().toISOString()
+      // No status field for received messages
     };
 
     setMessages(prev => [...prev, voiceMessage]);
