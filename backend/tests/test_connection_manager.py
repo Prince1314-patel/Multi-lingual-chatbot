@@ -31,7 +31,7 @@ def connection_manager(room_manager):
     """Create a fresh ConnectionManager for each test"""
     from app.services.rate_limiter import RateLimiter, RateLimitConfig
     rate_limiter = RateLimiter(RateLimitConfig())
-    return ConnectionManager(rate_limiter)
+    return ConnectionManager(room_manager, rate_limiter)
 
 
 @pytest.fixture

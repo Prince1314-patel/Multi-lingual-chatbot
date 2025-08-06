@@ -12,7 +12,7 @@ def services():
         max_connections_per_ip=10
     )
     rate_limiter = RateLimiter(rate_limit_config)
-    connection_manager = ConnectionManager(rate_limiter)
     room_manager = RoomManager()
+    connection_manager = ConnectionManager(room_manager, rate_limiter)
     message_handler = MessageHandler(connection_manager, room_manager, rate_limiter)
     return connection_manager, room_manager, message_handler
