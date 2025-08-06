@@ -9,6 +9,15 @@ import { Wifi, WifiOff, RefreshCw, AlertCircle } from "lucide-react";
 import { useWebSocket, WebSocketMessage, WebSocketError } from "@/hooks/useWebSocket";
 import { debugLog } from "@/lib/config";
 
+// Helper function to normalize timestamps to consistent format
+const normalizeTimestamp = (timestamp: string | undefined): string => {
+  if (!timestamp) return new Date().toISOString();
+  
+  // Parse the timestamp and convert to local ISO string
+  const date = new Date(timestamp);
+  return date.toISOString();
+};
+
 interface ChatWindowProps {
   roomId: string;
   currentUser: string;
@@ -80,7 +89,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
         to: (typeof data.to === 'string' ? data.to : otherUser),
         text: (typeof data.text === 'string' ? data.text : typeof data.content === 'string' ? data.content : ''),
         lang: (typeof data.lang === 'string' ? data.lang : 'en'),
-        timestamp: (typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString()),
+        timestamp: (typeof data.timestamp === 'string' ? new Date(data.timestamp).toISOString() : new Date().toISOString()),
         status: 'sent'
       };
 
