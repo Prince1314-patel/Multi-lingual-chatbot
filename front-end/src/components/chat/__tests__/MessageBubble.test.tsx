@@ -61,6 +61,20 @@ describe('MessageBubble', () => {
       expect(screen.getByText('Hello world!')).toBeInTheDocument();
     });
 
+    it('shows user ID when more than 2 users are connected', () => {
+      render(<MessageBubble message={textMessage} isCurrentUser={false} connectedUsersCount={3} />);
+      
+      expect(screen.getByText('user1')).toBeInTheDocument();
+      expect(screen.getByText('Hello world!')).toBeInTheDocument();
+    });
+
+    it('does not show user ID when 2 or fewer users are connected', () => {
+      render(<MessageBubble message={textMessage} isCurrentUser={false} connectedUsersCount={2} />);
+      
+      expect(screen.queryByText('user1')).not.toBeInTheDocument();
+      expect(screen.getByText('Hello world!')).toBeInTheDocument();
+    });
+
     it('shows timestamp when showTimestamp is true', () => {
       render(<MessageBubble message={textMessage} showTimestamp={true} />);
       
@@ -105,6 +119,20 @@ describe('MessageBubble', () => {
       
       expect(screen.getByRole('button')).toBeInTheDocument();
       expect(screen.getByText('0:00 / 0:00')).toBeInTheDocument();
+    });
+
+    it('shows user ID for voice messages when more than 2 users are connected', () => {
+      render(<MessageBubble message={voiceMessage} isCurrentUser={false} connectedUsersCount={3} />);
+      
+      expect(screen.getByText('user1')).toBeInTheDocument();
+      expect(screen.getByRole('button')).toBeInTheDocument();
+    });
+
+    it('does not show user ID for voice messages when 2 or fewer users are connected', () => {
+      render(<MessageBubble message={voiceMessage} isCurrentUser={false} connectedUsersCount={2} />);
+      
+      expect(screen.queryByText('user1')).not.toBeInTheDocument();
+      expect(screen.getByRole('button')).toBeInTheDocument();
     });
 
     it('creates audio URL from ArrayBuffer', () => {

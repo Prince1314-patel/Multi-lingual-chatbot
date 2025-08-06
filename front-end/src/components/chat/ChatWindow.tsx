@@ -478,6 +478,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
                 isCurrentUser={isCurrentUser}
                 showTimestamp={showTimestamp}
                 onRetry={isCurrentUser ? retryMessage : undefined}
+                connectedUsersCount={connectedUsers.size}
               />
             );
           })}

@@ -102,6 +102,7 @@ export const useWebSocket = (
     try {
       const wsUrl = getWebSocketUrl(roomId);
       debugLog('Connecting to WebSocket:', wsUrl);
+      debugLog('Current window location:', typeof window !== 'undefined' ? window.location.href : 'SSR');
       
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;

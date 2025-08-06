@@ -84,6 +84,11 @@ export const InputBar = ({ onSendMessage, onSendVoiceMessage, onTyping, disabled
     try {
       setRecordingError(null);
       
+      // Check if getUserMedia is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Audio recording is not supported in this browser or requires HTTPS');
+      }
+      
       // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -194,7 +199,9 @@ export const InputBar = ({ onSendMessage, onSendVoiceMessage, onTyping, disabled
       let errorMessage = 'Failed to start recording.';
       
       if (error instanceof Error) {
-        if (error.name === 'NotAllowedError') {
+        if (error.message.includes('not supported') || error.message.includes('HTTPS')) {
+          errorMessage = 'Voice recording requires HTTPS or is not supported in this browser. Try using HTTPS or a different browser.';
+        } else if (error.name === 'NotAllowedError') {
           errorMessage = 'Microphone access denied. Please allow microphone access and try again.';
         } else if (error.name === 'NotFoundError') {
           errorMessage = 'No microphone found. Please connect a microphone and try again.';

@@ -36,9 +36,10 @@ interface MessageBubbleProps {
   isCurrentUser?: boolean;
   showTimestamp?: boolean;
   onRetry?: (message: Message | VoiceMessage) => void;
+  connectedUsersCount?: number;
 }
 
-export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = false, onRetry }: MessageBubbleProps) => {
+export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = false, onRetry, connectedUsersCount = 0 }: MessageBubbleProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -396,6 +397,15 @@ export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = 
         "flex flex-col max-w-[70%] mb-4",
         isCurrentUser ? "ml-auto items-end" : "mr-auto items-start"
       )}>
+        {/* Show user ID when more than 2 users are connected */}
+        {connectedUsersCount > 2 && (
+          <div className={cn(
+            "text-xs text-muted-foreground mb-1 px-1",
+            isCurrentUser ? "text-right" : "text-left"
+          )}>
+            {voiceMessage.from}
+          </div>
+        )}
         <div className={cn(
           "rounded-2xl px-4 py-3 min-w-[200px]",
           isCurrentUser
@@ -471,6 +481,15 @@ export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = 
       "flex flex-col max-w-[70%] mb-4",
       isCurrentUser ? "ml-auto items-end" : "mr-auto items-start"
     )}>
+      {/* Show user ID when more than 2 users are connected */}
+      {connectedUsersCount > 2 && (
+        <div className={cn(
+          "text-xs text-muted-foreground mb-1 px-1",
+          isCurrentUser ? "text-right" : "text-left"
+        )}>
+          {regularMessage.from}
+        </div>
+      )}
       <div className={cn(
         "rounded-2xl px-4 py-2 break-words",
         isCurrentUser
