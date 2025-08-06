@@ -182,7 +182,13 @@ class ConnectionManager:
                 # Send as JSON text message
                 try:
                     serialized = serialize_message(message)
-                    json_str = json.dumps(serialized, default=str)
+                    # Use proper JSON encoder for datetime objects
+                    def json_encoder(obj):
+                        if isinstance(obj, datetime):
+                            return obj.isoformat()
+                        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+                    
+                    json_str = json.dumps(serialized, default=json_encoder)
                     
                     # Check message size
                     if len(json_str) > 1024 * 1024:  # 1MB limit for text messages

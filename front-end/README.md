@@ -164,7 +164,7 @@ describe('ChatWindow', () => {
 
 ### Test Coverage
 Current test coverage includes:
-- **ChatWindow**: User join/leave notifications, user count display, WebSocket message handling, voice message transmission
+- **ChatWindow**: User join/leave notifications, user count display (excluding current user), WebSocket message handling, voice message transmission
 - **Component Mocking**: WebSocket hooks, child components for isolated testing
 - **Integration Tests**: Multi-user scenarios, message flow testing, voice message end-to-end flow
 - **Voice Message Testing**: MediaRecorder API mocking, audio playback testing, binary WebSocket message handling
@@ -255,10 +255,13 @@ interface Message {
 #### WebSocket Message Formats
 - **Binary Messages**: Raw audio data transmitted as ArrayBuffer via WebSocket binary frames
 - **JSON Voice Messages**: Voice metadata with hex-encoded audio data for backend compatibility
-- **Message Types**: Supports 'voice', 'text', 'typing', 'user_join', 'user_leave', 'error' message types
+- **Message Types**: Supports 'voice', 'text', 'typing', 'user_join', 'user_leave', 'error', 'connection_established', 'message_confirmation' message types
+- **Typing Indicators**: Uses standardized `user_id` field for consistent user identification across all message types
+- **System Messages**: Automatic generation of system notifications for user join/leave events with proper timestamp handling
+- **Error Handling**: Comprehensive error message processing with user-friendly error display and reconnection options
 
 ### Chat Components
-- **ChatWindow**: Main container managing WebSocket connection and message state with voice message support
+- **ChatWindow**: Main container managing WebSocket connection and message state with voice message support. Tracks connected users excluding the current user for accurate user count display. Implements optimized message handling with proper deduplication for echoed messages and server timestamp synchronization. Handles comprehensive WebSocket message types including user join/leave notifications, error handling, and message delivery confirmations
 - **MessageBubble**: Displays individual text and voice messages with playback controls, message status indicators, and retry functionality for failed messages
 - **InputBar**: Handles text input and voice recording with MediaRecorder API integration
 - **TypingIndicator**: Shows when other users are typing
@@ -285,6 +288,9 @@ The application provides comprehensive message delivery tracking with visual fee
 - Status updates are handled through WebSocket message confirmations
 - Optimistic UI updates provide immediate feedback while awaiting server confirmation
 - Error states include user-friendly messaging and actionable retry options
+- **Message Echo Handling**: Distinguishes between new messages from other users and echoed messages from the server, preventing duplicate message display
+- **Server Timestamp Sync**: Updates local message timestamps with authoritative server timestamps when messages are echoed back
+- **Efficient Message Updates**: Uses message ID matching to update existing messages rather than creating duplicates
 
 ## 🔗 Routing
 

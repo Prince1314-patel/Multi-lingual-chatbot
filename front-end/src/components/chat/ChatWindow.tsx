@@ -22,7 +22,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
   const [isTyping, setIsTyping] = useState(false);
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const [connectionError, setConnectionError] = useState<WebSocketError | null>(null);
-  const [connectedUsers, setConnectedUsers] = useState<Set<string>>(new Set([currentUser]));
+  const [connectedUsers, setConnectedUsers] = useState<Set<string>>(new Set());
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -30,7 +30,6 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
   const {
     isConnected,
     isConnecting,
-    error: wsError,
     sendMessage: sendWebSocketMessage,
     sendBinaryMessage: sendWebSocketBinaryMessage,
     reconnect
@@ -39,11 +38,11 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
     onBinaryMessage: handleWebSocketBinaryMessage,
     onError: handleWebSocketError,
     onConnect: () => {
-      debugLog('Connected to chat room:', roomId);
+      debugLog('ChatWindow: Connected to chat room:', roomId);
       setConnectionError(null);
     },
     onDisconnect: () => {
-      debugLog('Disconnected from chat room:', roomId);
+      debugLog('ChatWindow: Disconnected from chat room:', roomId);
     },
     autoReconnect: true
   });
@@ -51,99 +50,118 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
   // Handle WebSocket messages
   function handleWebSocketMessage(data: WebSocketMessage) {
     debugLog('Received WebSocket message:', data);
-    
-    if (data.type === 'message_confirmation') {
+
+    if (data.type === 'connection_established') {
+      // Handle welcome message with connected users list
+      if (data.room_info && typeof data.room_info === 'object' && data.room_info !== null &&
+        'connected_users' in data.room_info && Array.isArray(data.room_info.connected_users)) {
+        setConnectedUsers(new Set(data.room_info.connected_users as string[]));
+        debugLog('Connected users updated from welcome message:', data.room_info.connected_users);
+      }
+    } else if (data.type === 'message_confirmation') {
       // Handle delivery confirmation
-      const messageId = data.message_id;
+      const messageId = typeof data.message_id === 'string' ? data.message_id : '';
       const status = data.status === 'delivered' ? 'delivered' : 'failed';
-      
+
       setMessages(prev => prev.map(msg => {
-        if ('id' in msg && msg.id === messageId && msg.from === currentUser) {
+        if ('id' in msg && 'from' in msg && msg.id === messageId && msg.from === currentUser) {
           return { ...msg, status };
         }
         return msg;
       }));
     } else if (data.type === 'typing') {
-      if (data.from !== currentUser) {
-        setIsOtherUserTyping(data.isTyping);
+      if (typeof data.user_id === 'string' && data.user_id !== currentUser) {
+        setIsOtherUserTyping(Boolean(data.isTyping));
       }
     } else if (data.type === 'message' || data.type === 'text') {
       const message: Message = {
-        id: data.id,
-        from: data.from || data.user_id,
-        to: data.to || otherUser,
-        text: data.text || data.content,
-        lang: data.lang || 'en',
-        timestamp: data.timestamp,
+        id: typeof data.id === 'string' ? data.id : '',
+        from: (typeof data.from === 'string' ? data.from : typeof data.user_id === 'string' ? data.user_id : ''),
+        to: (typeof data.to === 'string' ? data.to : otherUser),
+        text: (typeof data.text === 'string' ? data.text : typeof data.content === 'string' ? data.content : ''),
+        lang: (typeof data.lang === 'string' ? data.lang : 'en'),
+        timestamp: (typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString()),
         status: 'sent'
       };
-      
-      setMessages(prev => prev.map(msg => 
-        msg.timestamp === message.timestamp && msg.from === currentUser 
-          ? { ...msg, status: 'sent' as const }
-          : msg
-      ).concat(message.from !== currentUser ? [message] : []));
+
+      // If this is from another user, add it to messages
+      if (message.from !== currentUser) {
+        setMessages(prev => [...prev, message]);
+      } else {
+        // If this is our own message echoed back, update the existing message with server timestamp
+        setMessages(prev => prev.map(msg =>
+          'id' in msg && 'from' in msg && msg.id === message.id && msg.from === currentUser
+            ? { ...msg, timestamp: message.timestamp, status: 'sent' as const }
+            : msg
+        ));
+      }
     } else if (data.type === 'voice') {
       // Handle voice message from JSON (with hex-encoded audio data)
-      if (data.audio_data && data.user_id !== currentUser) {
+      if (typeof data.audio_data === 'string' && typeof data.user_id === 'string' && data.user_id !== currentUser) {
         try {
           const audioData = new Uint8Array(
             data.audio_data.match(/.{1,2}/g)?.map((byte: string) => parseInt(byte, 16)) || []
           ).buffer;
-          
+
           const voiceMessage: VoiceMessage = {
-            id: data.id,
+            id: typeof data.id === 'string' ? data.id : '',
             from: data.user_id,
             to: otherUser,
             type: 'voice',
             audioData,
-            duration: data.duration,
-            timestamp: data.timestamp,
+            duration: typeof data.duration === 'number' ? data.duration : undefined,
+            timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString(),
             status: 'sent'
           };
-          
-          setMessages(prev => [...prev, voiceMessage]);
+
+          // If this is from another user, add it to messages
+          if (voiceMessage.from !== currentUser) {
+            setMessages(prev => [...prev, voiceMessage]);
+          } else {
+            // If this is our own message echoed back, update the existing message with server timestamp
+            setMessages(prev => prev.map(msg =>
+              'id' in msg && 'from' in msg && msg.id === voiceMessage.id && msg.from === currentUser
+                ? { ...msg, timestamp: voiceMessage.timestamp, status: 'sent' as const }
+                : msg
+            ));
+          }
         } catch (error) {
           console.error('Error processing voice message:', error);
         }
       }
     } else if (data.type === 'user_join') {
       // Handle user join notifications
-      const userId = data.user_id;
-      if (userId !== currentUser) {
-        setConnectedUsers(prev => new Set([...prev, userId]));
-        
-        const systemMessage: SystemMessage = {
-          type: 'system',
-          content: `${userId} joined the chat`,
-          timestamp: data.timestamp || new Date().toISOString()
-        };
-        
-        setMessages(prev => [...prev, systemMessage]);
-      }
+      const userId = typeof data.user_id === 'string' ? data.user_id : 'Unknown User';
+      setConnectedUsers(prev => new Set([...prev, userId]));
+
+      const systemMessage: SystemMessage = {
+        type: 'system',
+        content: `${userId} joined the chat`,
+        timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString()
+      };
+
+      setMessages(prev => [...prev, systemMessage]);
     } else if (data.type === 'user_leave') {
       // Handle user leave notifications
-      const userId = data.user_id;
-      if (userId !== currentUser) {
-        setConnectedUsers(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(userId);
-          return newSet;
-        });
-        
-        const systemMessage: SystemMessage = {
-          type: 'system',
-          content: `${userId} left the chat`,
-          timestamp: data.timestamp || new Date().toISOString()
-        };
-        
-        setMessages(prev => [...prev, systemMessage]);
-      }
+      const userId = typeof data.user_id === 'string' ? data.user_id : 'Unknown User';
+      setConnectedUsers(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userId);
+        return newSet;
+      });
+
+      const systemMessage: SystemMessage = {
+        type: 'system',
+        content: `${userId} left the chat`,
+        timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString()
+      };
+
+      setMessages(prev => [...prev, systemMessage]);
     } else if (data.type === 'error') {
       // Handle backend error messages
       setConnectionError({
-        code: data.error_code || 'UNKNOWN_ERROR',
-        message: data.message || 'An unknown error occurred',
+        code: typeof data.error_code === 'string' ? data.error_code : 'UNKNOWN_ERROR',
+        message: typeof data.message === 'string' ? data.message : 'An unknown error occurred',
         timestamp: new Date().toISOString()
       });
     }
@@ -152,17 +170,19 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
   // Handle WebSocket binary messages (voice data)
   function handleWebSocketBinaryMessage(data: ArrayBuffer) {
     debugLog('Received WebSocket binary message:', data.byteLength, 'bytes');
-    
+
     // Create voice message from binary data
     const voiceMessage: VoiceMessage = {
+      id: generateMessageId(),
       from: otherUser, // Assume it's from the other user since we don't send binary to ourselves
       to: currentUser,
       type: 'voice',
       audioData: data,
+      duration: undefined, // Will be set when audio loads
       timestamp: new Date().toISOString(),
       status: 'sent'
     };
-    
+
     setMessages(prev => [...prev, voiceMessage]);
   }
 
@@ -172,11 +192,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
     setConnectionError(error);
   }
 
-  // Placeholder function for future AI translation
-  const translateMessage = async (message: string, targetLang: string): Promise<string> => {
-    // TODO: Implement AI translation
-    return message;
-  };
+
 
   const scrollToBottom = () => {
     if (scrollAreaRef.current) {
@@ -201,7 +217,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
   }, [messages, isOtherUserTyping]);
 
   const generateMessageId = () => {
-    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   };
 
   const sendMessage = (text: string) => {
@@ -222,26 +238,24 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
       to: otherUser,
       text,
       lang: 'en',
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toISOString(), // Temporary timestamp, will be replaced by server timestamp
       status: 'sending'
     };
 
     // Add message with sending status
     setMessages(prev => [...prev, message]);
 
-    // Send to WebSocket using the backend's expected format
+    // Send to WebSocket using the backend's expected format (no timestamp - server will generate)
     const success = sendWebSocketMessage({
       id: messageId,
       type: 'text',
-      user_id: currentUser,
-      room_id: roomId,
       content: text
     });
 
     if (!success) {
       // Update status to failed immediately if WebSocket send failed
-      setMessages(prev => prev.map(msg => 
-        msg.id === messageId && msg.from === currentUser
+      setMessages(prev => prev.map(msg =>
+        'id' in msg && 'from' in msg && msg.id === messageId && msg.from === currentUser
           ? { ...msg, status: 'failed' as const }
           : msg
       ));
@@ -263,7 +277,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
     try {
       // Convert blob to ArrayBuffer
       const arrayBuffer = await audioBlob.arrayBuffer();
-      
+
       const messageId = generateMessageId();
       // Create voice message for UI
       const voiceMessage: VoiceMessage = {
@@ -272,7 +286,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
         to: otherUser,
         type: 'voice',
         audioData: arrayBuffer,
-        timestamp: new Date().toISOString(),
+        timestamp: new Date().toISOString(), // Temporary timestamp, will be replaced by server timestamp
         status: 'sending'
       };
 
@@ -284,8 +298,8 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
 
       if (!success) {
         // Update status to failed immediately if WebSocket send failed
-        setMessages(prev => prev.map(msg => 
-          msg.id === messageId && msg.from === currentUser
+        setMessages(prev => prev.map(msg =>
+          'id' in msg && 'from' in msg && msg.id === messageId && msg.from === currentUser
             ? { ...msg, status: 'failed' as const }
             : msg
         ));
@@ -308,8 +322,8 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
     }
 
     // Update message status to sending
-    setMessages(prev => prev.map(msg => 
-      msg.id === failedMessage.id && msg.from === currentUser
+    setMessages(prev => prev.map(msg =>
+      'id' in msg && 'from' in msg && msg.id === failedMessage.id && msg.from === currentUser
         ? { ...msg, status: 'sending' as const }
         : msg
     ));
@@ -318,8 +332,8 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
       // Retry voice message
       const success = sendWebSocketBinaryMessage && sendWebSocketBinaryMessage(failedMessage.audioData);
       if (!success) {
-        setMessages(prev => prev.map(msg => 
-          msg.id === failedMessage.id && msg.from === currentUser
+        setMessages(prev => prev.map(msg =>
+          'id' in msg && 'from' in msg && msg.id === failedMessage.id && msg.from === currentUser
             ? { ...msg, status: 'failed' as const }
             : msg
         ));
@@ -334,10 +348,10 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
         room_id: roomId,
         content: textMessage.text || ''
       });
-      
+
       if (!success) {
-        setMessages(prev => prev.map(msg => 
-          msg.id === failedMessage.id && msg.from === currentUser
+        setMessages(prev => prev.map(msg =>
+          'id' in msg && 'from' in msg && msg.id === failedMessage.id && msg.from === currentUser
             ? { ...msg, status: 'failed' as const }
             : msg
         ));
@@ -349,11 +363,9 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
     if (!isConnected) return;
 
     setIsTyping(typing);
-    
+
     sendWebSocketMessage({
       type: 'typing',
-      from: currentUser,
-      to: otherUser,
       isTyping: typing
     });
 
@@ -392,8 +404,8 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
               Retry
             </Button>
           )}
-          <Badge 
-            variant={isConnected ? "default" : isConnecting ? "secondary" : "destructive"} 
+          <Badge
+            variant={isConnected ? "default" : isConnecting ? "secondary" : "destructive"}
             className="gap-1"
           >
             {isConnected ? (
@@ -413,15 +425,25 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
         <div className="bg-destructive/10 border-b border-destructive/20 p-3">
           <div className="flex items-center gap-2 text-sm text-destructive">
             <AlertCircle className="h-4 w-4" />
-            <span>Connection Error: {connectionError.message}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={reconnect}
-              className="ml-auto h-6 px-2 text-xs"
-            >
-              Reconnect
-            </Button>
+            <div className="flex-1">
+              <span>Connection Error: {connectionError.message}</span>
+              {connectionError.code === 'CONNECTION_LIMIT_EXCEEDED' && (
+                <div className="text-xs mt-1 text-muted-foreground">
+                  Too many connections from your location. Please close other chat tabs or wait a moment before trying again.
+                </div>
+              )}
+            </div>
+            {connectionError.code !== 'CONNECTION_LIMIT_EXCEEDED' &&
+              connectionError.code !== 'RECONNECTION_STOPPED' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={reconnect}
+                  className="ml-auto h-6 px-2 text-xs"
+                >
+                  Reconnect
+                </Button>
+              )}
           </div>
         </div>
       )}
@@ -430,15 +452,15 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
       <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
         <div className="space-y-1">
           {messages.map((message, index) => {
-            const showTimestamp = index === 0 || 
+            const showTimestamp = index === 0 ||
               new Date(messages[index - 1]?.timestamp).getTime() < new Date(message.timestamp).getTime() - 300000; // 5 minutes
-            
-            const messageKey = 'type' in message && message.type === 'system' 
-              ? `system-${message.timestamp}` 
-              : `${message.timestamp}-${(message as Message).from}`;
-            
+
+            const messageKey = 'type' in message && message.type === 'system'
+              ? `system-${message.timestamp}`
+              : `${message.timestamp}-${'from' in message ? message.from : 'unknown'}`;
+
             const isCurrentUser = 'from' in message ? message.from === currentUser : false;
-            
+
             return (
               <MessageBubble
                 key={messageKey}
@@ -449,9 +471,9 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
               />
             );
           })}
-          
-          <TypingIndicator 
-            userName={otherUser} 
+
+          <TypingIndicator
+            userName={otherUser}
             isVisible={isOtherUserTyping}
           />
         </div>

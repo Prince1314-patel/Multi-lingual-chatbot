@@ -3,7 +3,7 @@ import { getWebSocketUrl, config, debugLog } from '@/lib/config';
 
 export interface WebSocketMessage {
   type: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface WebSocketError {
@@ -53,6 +53,7 @@ export const useWebSocket = (
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const reconnectAttemptsRef = useRef(0);
   const connectionTimeoutRef = useRef<NodeJS.Timeout>();
+  const shouldStopReconnecting = useRef(false);
 
   const createError = (code: string, message: string): WebSocketError => ({
     code,
@@ -86,6 +87,11 @@ export const useWebSocket = (
 
     if (isConnecting) {
       debugLog('WebSocket connection already in progress');
+      return;
+    }
+
+    if (shouldStopReconnecting.current) {
+      debugLog('WebSocket reconnection stopped due to server rejection');
       return;
     }
 
@@ -128,12 +134,33 @@ export const useWebSocket = (
             return;
           }
           
+          // Handle Blob messages (convert to ArrayBuffer)
+          if (event.data instanceof Blob) {
+            debugLog('WebSocket blob message received:', event.data.size, 'bytes');
+            event.data.arrayBuffer().then((arrayBuffer) => {
+              onBinaryMessage?.(arrayBuffer);
+            }).catch((error) => {
+              debugLog('Error converting blob to ArrayBuffer:', error);
+              handleError('BLOB_CONVERSION_ERROR', 'Failed to convert blob message');
+            });
+            return;
+          }
+          
           // Handle text messages (JSON)
-          const message: WebSocketMessage = JSON.parse(event.data);
-          debugLog('WebSocket message received:', message);
-          onMessage?.(message);
+          if (typeof event.data === 'string') {
+            const message: WebSocketMessage = JSON.parse(event.data);
+            debugLog('WebSocket message received:', message);
+            onMessage?.(message);
+            return;
+          }
+          
+          // Unknown message type
+          debugLog('Unknown WebSocket message type:', typeof event.data, event.data);
+          handleError('UNKNOWN_MESSAGE_TYPE', `Unknown message type: ${typeof event.data}`);
+          
         } catch (parseError) {
-          handleError('INVALID_MESSAGE_FORMAT', 'Failed to parse message');
+          debugLog('WebSocket message parse error:', parseError, 'Raw data:', event.data);
+          handleError('INVALID_MESSAGE_FORMAT', `Failed to parse message: ${parseError}`);
         }
       };
 
@@ -143,14 +170,42 @@ export const useWebSocket = (
         setIsConnected(false);
         setIsConnecting(false);
         
-        if (event.code !== 1000) { // Not a normal closure
-          handleError('CONNECTION_CLOSED', `Connection closed: ${event.reason || 'Unknown reason'}`);
+        // Check for specific error codes that should stop reconnection
+        const shouldStopReconnectingCodes = [
+          4003, // Connection limit exceeded (custom code)
+          4001, // Unauthorized
+          4004, // Rate limited
+          1002, // Protocol error
+          1003, // Unsupported data
+          1007, // Invalid frame payload data
+          1008, // Policy violation
+          1011  // Internal server error
+        ];
+        
+        if (shouldStopReconnectingCodes.includes(event.code)) {
+          shouldStopReconnecting.current = true;
+          debugLog('Stopping reconnection due to error code:', event.code);
+        }
+        
+        // Don't treat code 1001 (going away) as an error for reconnection
+        if (event.code !== 1000 && event.code !== 1001) { // Not a normal closure or going away
+          const errorMessage = event.reason || 'Unknown reason';
+          if (event.code === 4003 || errorMessage.includes('connection limit') || errorMessage.includes('CONNECTION_LIMIT_EXCEEDED')) {
+            handleError('CONNECTION_LIMIT_EXCEEDED', 'Connection limit exceeded. Please try again later.');
+            shouldStopReconnecting.current = true;
+          } else {
+            handleError('CONNECTION_CLOSED', `Connection closed: ${errorMessage}`);
+          }
         }
         
         onDisconnect?.();
 
-        // Auto-reconnect logic
-        if (autoReconnect && reconnectAttemptsRef.current < config.reconnectAttempts) {
+        // Auto-reconnect logic - only if we shouldn't stop reconnecting and it's not a normal close
+        if (autoReconnect && 
+            !shouldStopReconnecting.current && 
+            event.code !== 1000 && // Normal close
+            event.code !== 1001 && // Going away (page refresh/navigation)
+            reconnectAttemptsRef.current < config.reconnectAttempts) {
           const delay = config.reconnectDelay * Math.pow(2, reconnectAttemptsRef.current); // Exponential backoff
           debugLog(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttemptsRef.current + 1}/${config.reconnectAttempts})`);
           
@@ -158,7 +213,9 @@ export const useWebSocket = (
             reconnectAttemptsRef.current++;
             connect();
           }, delay);
-        } else if (autoReconnect) {
+        } else if (autoReconnect && shouldStopReconnecting.current) {
+          handleError('RECONNECTION_STOPPED', 'Reconnection stopped due to server rejection');
+        } else if (autoReconnect && reconnectAttemptsRef.current >= config.reconnectAttempts) {
           handleError('MAX_RECONNECT_ATTEMPTS', 'Maximum reconnection attempts reached');
         }
       };
@@ -174,7 +231,7 @@ export const useWebSocket = (
       setIsConnecting(false);
       handleError('CONNECTION_FAILED', `Failed to create WebSocket connection: ${error}`);
     }
-  }, [roomId, isConnecting, onMessage, onError, onConnect, onDisconnect, autoReconnect, handleError, clearTimeouts]);
+  }, [roomId, handleError, clearTimeouts]); // Removed problematic dependencies
 
   const disconnect = useCallback(() => {
     debugLog('Disconnecting WebSocket');
@@ -189,13 +246,28 @@ export const useWebSocket = (
     setIsConnecting(false);
     setError(null);
     reconnectAttemptsRef.current = 0;
+    shouldStopReconnecting.current = false; // Reset the flag on manual disconnect
   }, [clearTimeouts]);
 
   const reconnect = useCallback(() => {
     debugLog('Manual reconnect requested');
-    disconnect();
-    setTimeout(connect, 100); // Small delay to ensure cleanup
-  }, [connect, disconnect]);
+    shouldStopReconnecting.current = false; // Reset the flag on manual reconnect
+    clearTimeouts();
+    
+    if (wsRef.current) {
+      wsRef.current.close(1000, 'Manual reconnect');
+      wsRef.current = null;
+    }
+    
+    setIsConnected(false);
+    setIsConnecting(false);
+    setError(null);
+    reconnectAttemptsRef.current = 0;
+    
+    setTimeout(() => {
+      connect();
+    }, 100); // Small delay to ensure cleanup
+  }, [connect, clearTimeouts]);
 
   const sendMessage = useCallback((message: WebSocketMessage): boolean => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -233,8 +305,19 @@ export const useWebSocket = (
   // Connect on mount and room change
   useEffect(() => {
     connect();
-    return disconnect;
-  }, [roomId]); // Only depend on roomId to avoid reconnecting on every render
+    return () => {
+      debugLog('Cleaning up WebSocket connection for room:', roomId);
+      clearTimeouts();
+      if (wsRef.current) {
+        wsRef.current.close(1000, 'Room changed');
+        wsRef.current = null;
+      }
+      setIsConnected(false);
+      setIsConnecting(false);
+      reconnectAttemptsRef.current = 0;
+      shouldStopReconnecting.current = false;
+    };
+  }, [roomId]); // Only depend on roomId
 
   // Cleanup on unmount
   useEffect(() => {

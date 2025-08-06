@@ -61,7 +61,16 @@ class MessageHandler:
                 )
                 return False
             
-            # Deserialize message
+            # --- START: CORRECTED LOGIC ---
+            # Enrich message data with trusted connection data BEFORE deserialization
+            # This ensures Pydantic validation passes with required fields
+            message_data['user_id'] = connection.user_id
+            message_data['room_id'] = connection.room_id
+            # Always generate server-side timestamp to ensure consistency (as datetime object)
+            message_data['timestamp'] = datetime.utcnow()
+            # --- END: CORRECTED LOGIC ---
+
+            # Deserialize message (now with all required fields)
             try:
                 message = deserialize_message(message_data)
             except (ValueError, KeyError) as e:
@@ -69,15 +78,6 @@ class MessageHandler:
                     websocket, "INVALID_MESSAGE_FORMAT", f"Invalid message format: {str(e)}"
                 )
                 return False
-
-            # --- START: CORRECTED LOGIC ---
-            # Enrich message with trusted connection data before validation.
-            # This fixes the "INVALID_ROOM" error for messages that don't include these details.
-            if hasattr(message, 'user_id'):
-                message.user_id = connection.user_id
-            if hasattr(message, 'room_id'):
-                message.room_id = connection.room_id
-            # --- END: CORRECTED LOGIC ---
             
             # Validate message belongs to the connection's room (now works for all types)
             if hasattr(message, 'room_id') and message.room_id != connection.room_id:
@@ -141,12 +141,13 @@ class MessageHandler:
                 )
                 return False
             
-            # Create VoiceMessage with binary data
+            # Create VoiceMessage with binary data and server-side timestamp
             voice_message = VoiceMessage(
                 user_id=connection.user_id,
                 room_id=connection.room_id,
                 audio_data=binary_data,
-                audio_format="webm"  # Default format, could be detected or specified
+                audio_format="webm",  # Default format, could be detected or specified
+                timestamp=datetime.utcnow()  # Server-side timestamp
             )
             
             # Update connection activity
@@ -307,17 +308,17 @@ class MessageHandler:
                 return False
             
             # Update typing status in connection
-            connection.set_typing(message.is_typing)
+            connection.set_typing(message.isTyping)
             
             # Manage typing timeout
-            await self._manage_typing_timeout(connection, message.is_typing)
+            await self._manage_typing_timeout(connection, message.isTyping)
             
             # Broadcast typing indicator to other users in the room (exclude sender)
             sent_count = await self.connection_manager.broadcast_to_room(
                 connection.room_id, message, exclude_user=connection.user_id
             )
             
-            logger.debug(f"Typing indicator from {connection.user_id} (typing: {message.is_typing}) broadcasted to {sent_count} users")
+            logger.debug(f"Typing indicator from {connection.user_id} (typing: {message.isTyping}) broadcasted to {sent_count} users")
             return True
             
         except Exception as e:
@@ -371,7 +372,7 @@ class MessageHandler:
                 typing_message = TypingMessage(
                     user_id=connection.user_id,
                     room_id=connection.room_id,
-                    is_typing=False
+                    isTyping=False
                 )
                 
                 await self.connection_manager.broadcast_to_room(
@@ -419,7 +420,7 @@ class MessageHandler:
                 typing_message = TypingMessage(
                     user_id=user_id,
                     room_id=room_id,
-                    is_typing=False
+                    isTyping=False
                 )
                 
                 await self.connection_manager.broadcast_to_room(

@@ -18,6 +18,7 @@ This plan outlines the phase-wise implementation of the AI-Powered Multilingual 
     - Develop chat UI with message list, text input, voice recording using MediaRecorder API.
     - Implement connection to WebSocket room via URL parameter.
     - Handle sending/receiving text and audio messages over WebSocket.
+    - Implement message deduplication and server timestamp synchronization for reliable message handling.
 - Testing:
     - Unit and integration testing for WebSocket lifecycle and message flows.
     - Manual end-to-end testing for multi-user chat interaction.

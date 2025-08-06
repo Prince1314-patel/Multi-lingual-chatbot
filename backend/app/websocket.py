@@ -2,6 +2,7 @@ import json
 import logging
 import time
 from typing import Optional
+from datetime import datetime
 from fastapi import WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
 from fastapi.routing import APIRouter
 
@@ -173,17 +174,28 @@ async def websocket_chat_endpoint(
         
         # Send welcome message with error handling
         try:
+            # Get current connected users list
+            connected_users = list(room.get_all_connections().keys())
+            
             welcome_message = {
                 "type": "connection_established",
                 "user_id": user_id,
                 "room_id": room_id,
+                "timestamp": time.time(),
                 "room_info": {
                     "connection_count": room.get_connection_count(),
+                    "connected_users": connected_users,
                     "created_at": room.created_at.isoformat()
                 }
             }
             
-            await websocket.send_text(json.dumps(welcome_message, default=str))
+            # Use proper JSON encoder for datetime objects
+            def json_encoder(obj):
+                if isinstance(obj, datetime):
+                    return obj.isoformat()
+                raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+            
+            await websocket.send_text(json.dumps(welcome_message, default=json_encoder))
             logger.log_connection_event("welcome_sent", user_id, room_id)
             
         except Exception as e:
@@ -239,7 +251,7 @@ async def websocket_chat_endpoint(
                 elif "bytes" in message:
                     try:
                         # Handle binary messages (voice messages)
-                        await msg_handler.handle_binary_message(websocket, message["bytes"], user_id, room_id)
+                        await msg_handler.handle_binary_message(websocket, message["bytes"])
                         
                     except Exception as e:
                         logger.log_error(

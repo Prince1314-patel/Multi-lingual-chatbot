@@ -23,10 +23,10 @@ This document outlines best practices, architectural decisions, and coding stand
 - **Component Breakdown:**  
   - **App:** Root component managing routing and context providers.  
   - **RoomJoin:** Component to enter or generate a chat room link.  
-  - **ChatWindow:** Displays messages and controls message sending with voice message support.  
+  - **ChatWindow:** Displays messages and controls message sending with voice message support. Manages connected user tracking excluding the current user for accurate user count display. Implements optimized message handling with proper deduplication for echoed messages and server timestamp synchronization. Handles comprehensive WebSocket message types including user join/leave notifications, system messages, error handling, and message delivery confirmations.  
   - **MessageBubble:** Renders individual text and voice messages with integrated audio playback controls, message status indicators, and retry functionality for failed messages.  
   - **InputBar:** Text input box and voice recording with MediaRecorder API integration.  
-  - **TypingIndicator:** Shows when other users are typing.  
+  - **TypingIndicator:** Shows when other users are typing with standardized user identification.  
   - **LanguageSelector:** Allows users to choose preferred language(s).  
   - **ProgressIndicator:** Shows transcription/translation/TTS progress.  
   - **ConfigTest:** Development component for testing and displaying configuration values.  
@@ -83,9 +83,12 @@ This document outlines best practices, architectural decisions, and coding stand
 - Use JSON message format with clear types (e.g., text, voice, typing, user_join, user_leave, error).  
 - Support binary WebSocket messages for efficient voice data transmission.  
 - Implement message tracking with unique IDs and delivery status updates.
+- Use standardized `user_id` field for consistent user identification across all message types.
 - Manage reconnection logic and show connection status to users.  
 - Handle both JSON-encoded audio data and binary audio data formats.
-- Provide retry mechanisms for failed message delivery.  
+- Provide retry mechanisms for failed message delivery.
+- **Message Deduplication**: Distinguish between new messages from other users and server-echoed messages to prevent duplicate display.
+- **Server Timestamp Synchronization**: Update local message timestamps with authoritative server timestamps when messages are confirmed.  
 
 ---
 
@@ -163,7 +166,7 @@ src/
 - **Configuration Testing:** Use the ConfigTest component to verify configuration during development
 
 ### Current Test Coverage
-- **ChatWindow Component:** Comprehensive tests for user notifications, join/leave events, user count display
+- **ChatWindow Component:** Comprehensive tests for user notifications, join/leave events, user count display (excluding current user)
 - **WebSocket Integration:** Mocked WebSocket behavior for testing message handling
 - **Multi-user Scenarios:** Tests for multiple users joining and leaving chat rooms
 

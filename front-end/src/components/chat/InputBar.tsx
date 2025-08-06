@@ -2,6 +2,7 @@ import { useState, KeyboardEvent, useRef, useCallback } from "react";
 import { Send, Mic, MicOff, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { debugLog } from "@/lib/config";
 
 interface InputBarProps {
   onSendMessage: (message: string) => void;
@@ -9,6 +10,37 @@ interface InputBarProps {
   onTyping: (isTyping: boolean) => void;
   disabled?: boolean;
 }
+
+// Convert audio to a more compatible format using Web Audio API
+const convertToCompatibleFormat = async (audioBlob: Blob, originalFormat: string): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    try {
+      // For now, we'll try to re-encode using a different MIME type
+      // This is a simple approach - in production, you might want more sophisticated conversion
+      
+      const isFirefox = navigator.userAgent.includes('Firefox');
+      const isChrome = navigator.userAgent.includes('Chrome');
+      
+      if (isFirefox && originalFormat.includes('webm')) {
+        // Firefox webm might not be compatible with Brave, try ogg
+        const convertedBlob = new Blob([audioBlob], { type: 'audio/ogg;codecs=opus' });
+        debugLog('Converted Firefox webm to ogg for better compatibility');
+        resolve(convertedBlob);
+      } else if (isChrome && originalFormat.includes('webm')) {
+        // Chrome/Brave webm should be fine, but ensure proper codec specification
+        const convertedBlob = new Blob([audioBlob], { type: 'audio/webm;codecs=opus' });
+        debugLog('Ensured proper webm codec specification');
+        resolve(convertedBlob);
+      } else {
+        // No conversion needed
+        resolve(audioBlob);
+      }
+    } catch (error) {
+      debugLog('Audio conversion error:', error);
+      reject(error);
+    }
+  });
+};
 
 export const InputBar = ({ onSendMessage, onSendVoiceMessage, onTyping, disabled = false }: InputBarProps) => {
   const [message, setMessage] = useState("");
@@ -61,9 +93,54 @@ export const InputBar = ({ onSendMessage, onSendVoiceMessage, onTyping, disabled
         } 
       });
       
-      // Create MediaRecorder with webm format (supported by backend)
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
+      // Try different audio formats for better browser compatibility
+      let mediaRecorder: MediaRecorder;
+      
+      // Prioritize formats based on browser for better cross-compatibility
+      const isFirefox = navigator.userAgent.includes('Firefox');
+      const isChrome = navigator.userAgent.includes('Chrome');
+      
+      let supportedFormats: string[];
+      if (isFirefox) {
+        // Firefox: prioritize ogg and webm without specific codecs
+        supportedFormats = [
+          'audio/ogg',
+          'audio/webm',
+          'audio/ogg;codecs=opus',
+          'audio/webm;codecs=opus',
+          'audio/wav'
+        ];
+      } else if (isChrome) {
+        // Chrome/Brave: prioritize webm with opus
+        supportedFormats = [
+          'audio/webm;codecs=opus',
+          'audio/webm',
+          'audio/ogg;codecs=opus',
+          'audio/mp4',
+          'audio/wav'
+        ];
+      } else {
+        // Other browsers: use general priority
+        supportedFormats = [
+          'audio/webm',
+          'audio/ogg',
+          'audio/mp4',
+          'audio/wav'
+        ];
+      }
+      
+      let selectedFormat = 'audio/webm'; // fallback
+      for (const format of supportedFormats) {
+        if (MediaRecorder.isTypeSupported(format)) {
+          selectedFormat = format;
+          break;
+        }
+      }
+      
+      debugLog('Recording with audio format:', selectedFormat);
+      debugLog('Supported formats check:', supportedFormats.map(f => ({ format: f, supported: MediaRecorder.isTypeSupported(f) })));
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType: selectedFormat
       });
       
       mediaRecorderRef.current = mediaRecorder;
@@ -75,12 +152,26 @@ export const InputBar = ({ onSendMessage, onSendVoiceMessage, onTyping, disabled
         }
       };
       
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' });
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: selectedFormat });
+        
+        debugLog('Audio recorded:', {
+          size: audioBlob.size,
+          type: audioBlob.type,
+          chunks: audioChunksRef.current.length,
+          browser: navigator.userAgent.includes('Chrome') ? 'Chrome/Brave' : navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Other'
+        });
         
         // Send voice message if we have audio data
         if (audioBlob.size > 0) {
-          onSendVoiceMessage(audioBlob);
+          // Try to convert to a more compatible format if needed
+          try {
+            const compatibleBlob = await convertToCompatibleFormat(audioBlob, selectedFormat);
+            onSendVoiceMessage(compatibleBlob);
+          } catch (error) {
+            debugLog('Audio conversion failed, sending original:', error);
+            onSendVoiceMessage(audioBlob);
+          }
         }
         
         // Clean up
