@@ -178,7 +178,7 @@ class MessageHandler:
     
     async def handle_text_message(self, connection, message: TextMessage) -> bool:
         """
-        Handle text message processing and broadcasting with rate limiting
+        Handle text message processing and broadcasting with translation support
         
         Args:
             connection: ConnectionInfo object
@@ -210,13 +210,33 @@ class MessageHandler:
                 )
                 return False
             
-            # Broadcast to all users in the room with delivery confirmation
-            sent_count = await self.connection_manager.broadcast_to_room(
-                connection.room_id, message, exclude_user=connection.user_id, send_confirmation=True
-            )
-            
-            logger.info(f"Text message from {connection.user_id} broadcasted to {sent_count} users in room {connection.room_id}")
-            return True
+            # Handle translation if translation service is available and target language is specified
+            if (self.translation_service and 
+                self.translation_service.enabled and 
+                message.target_language and 
+                message.target_language != message.lang):
+                
+                # Set initial translation status
+                message.translation_status = "processing"
+                
+                # Broadcast original message immediately
+                sent_count = await self.connection_manager.broadcast_to_room(
+                    connection.room_id, message, exclude_user=connection.user_id, send_confirmation=True
+                )
+                
+                # Process translation asynchronously
+                asyncio.create_task(self._process_translation(connection, message))
+                
+                logger.info(f"Text message from {connection.user_id} broadcasted to {sent_count} users in room {connection.room_id} (translation pending)")
+                return True
+            else:
+                # No translation needed, broadcast immediately
+                sent_count = await self.connection_manager.broadcast_to_room(
+                    connection.room_id, message, exclude_user=connection.user_id, send_confirmation=True
+                )
+                
+                logger.info(f"Text message from {connection.user_id} broadcasted to {sent_count} users in room {connection.room_id}")
+                return True
             
         except Exception as e:
             logger.error(f"Error handling text message: {e}")
@@ -478,3 +498,60 @@ class MessageHandler:
         
         self.typing_timeouts.clear()
         logger.info("Cleaned up all typing timeouts")
+    
+    async def _process_translation(self, connection, message: TextMessage) -> None:
+        """
+        Process translation for a text message asynchronously.
+        
+        This method handles the translation of text messages in the background,
+        updating the message with translation results and broadcasting the updated
+        message to all users in the room.
+        
+        Args:
+            connection: ConnectionInfo object
+            message: TextMessage to translate
+        """
+        try:
+            logger.debug(f"Processing translation for message {message.id} from {connection.user_id}")
+            
+            # Create translation request
+            translation_request = TranslationRequest(
+                text=message.content,
+                source_language=message.lang,
+                target_language=message.target_language,
+                user_id=connection.user_id,
+                room_id=connection.room_id,
+                message_id=message.id,
+                timestamp=datetime.utcnow()
+            )
+            
+            # Perform translation
+            translation_result = await self.translation_service.translate_text(translation_request)
+            
+            # Update message with translation results
+            message.translated_content = translation_result.translated_text
+            message.translation_status = "completed"
+            
+            # Broadcast updated message with translation
+            sent_count = await self.connection_manager.broadcast_to_room(
+                connection.room_id, message, exclude_user=connection.user_id
+            )
+            
+            logger.info(f"Translation completed for message {message.id}: "
+                       f"{translation_result.source_language} -> {translation_result.target_language} "
+                       f"(broadcasted to {sent_count} users)")
+            
+        except Exception as e:
+            logger.error(f"Translation failed for message {message.id}: {e}")
+            
+            # Update message with error status
+            message.translation_status = "failed"
+            message.translation_error = str(e)
+            
+            # Broadcast error message
+            try:
+                await self.connection_manager.broadcast_to_room(
+                    connection.room_id, message, exclude_user=connection.user_id
+                )
+            except Exception as broadcast_error:
+                logger.error(f"Failed to broadcast translation error: {broadcast_error}")

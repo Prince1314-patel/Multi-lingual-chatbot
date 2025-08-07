@@ -9,6 +9,8 @@ from fastapi.routing import APIRouter
 from .services import ConnectionManager, RoomManager, MessageHandler
 from .services.rate_limiter import RateLimiter, RateLimitConfig
 from .services.memory_optimizer import MemoryOptimizer
+from .ai_services.translation_service import TranslationService
+from .ai_services.config import ai_config
 from .models import validate_room_id, generate_user_id
 from .core import ErrorHandler, ErrorCode, ChatLogger, get_error_handler, get_chat_logger
 
@@ -23,11 +25,12 @@ room_manager: Optional[RoomManager] = None
 message_handler: Optional[MessageHandler] = None
 rate_limiter: Optional[RateLimiter] = None
 memory_optimizer: Optional[MemoryOptimizer] = None
+translation_service: Optional[TranslationService] = None
 
 
 def init_websocket_services():
     """Initialize WebSocket services - called from main.py"""
-    global connection_manager, room_manager, message_handler, rate_limiter, memory_optimizer
+    global connection_manager, room_manager, message_handler, rate_limiter, memory_optimizer, translation_service
     
     # Initialize rate limiter with configuration
     rate_limit_config = RateLimitConfig(
@@ -39,10 +42,18 @@ def init_websocket_services():
     )
     rate_limiter = RateLimiter(rate_limit_config)
     
-    # Initialize services with rate limiter
+    # Initialize translation service
+    try:
+        translation_service = TranslationService(ai_config)
+        logger.info("Translation service initialized successfully")
+    except Exception as e:
+        logger.warning(f"Failed to initialize translation service: {e}")
+        translation_service = None
+    
+    # Initialize services with rate limiter and translation service
     room_manager = RoomManager(cleanup_timeout_minutes=30)
     connection_manager = ConnectionManager(room_manager, rate_limiter)
-    message_handler = MessageHandler(connection_manager, room_manager, rate_limiter)
+    message_handler = MessageHandler(connection_manager, room_manager, rate_limiter, translation_service)
     
     # Initialize memory optimizer
     memory_optimizer = MemoryOptimizer()
@@ -62,6 +73,10 @@ def get_services():
         raise HTTPException(status_code=500, detail="WebSocket services not initialized")
     
     return connection_manager, room_manager, message_handler
+
+def get_translation_service():
+    """Dependency to get translation service"""
+    return translation_service
 
 def get_all_services():
     """Get all services including performance optimization services"""
@@ -489,6 +504,7 @@ async def websocket_health_check():
         # Get services with individual error handling
         try:
             conn_mgr, room_mgr, msg_handler = get_services()
+            translation_svc = get_translation_service()
             health_status['services']['service_initialization'] = 'healthy'
         except Exception as e:
             logger.log_error(
@@ -544,6 +560,28 @@ async def websocket_health_check():
             health_status['services']['message_handler'] = 'unhealthy'
             health_status['errors'].append(f"Message handler error: {str(e)}")
         
+        # Check translation service health
+        try:
+            if translation_svc and translation_svc.enabled:
+                translation_healthy = await translation_svc.health_check()
+                if translation_healthy:
+                    health_status['services']['translation_service'] = 'healthy'
+                    health_status['stats']['translation_service'] = translation_svc.get_stats()
+                else:
+                    health_status['services']['translation_service'] = 'unhealthy'
+                    health_status['errors'].append("Translation service health check failed")
+            else:
+                health_status['services']['translation_service'] = 'disabled'
+                health_status['stats']['translation_service'] = {'status': 'disabled'}
+        except Exception as e:
+            logger.log_error(
+                ErrorCode.INTERNAL_SERVER_ERROR,
+                f"Translation service health check failed: {str(e)}",
+                exception=e
+            )
+            health_status['services']['translation_service'] = 'unhealthy'
+            health_status['errors'].append(f"Translation service error: {str(e)}")
+        
         # Determine overall health status
         unhealthy_services = [k for k, v in health_status['services'].items() if v == 'unhealthy']
         
@@ -587,7 +625,7 @@ async def websocket_health_check():
 # Cleanup function for graceful shutdown
 async def cleanup_websocket_services():
     """Clean up WebSocket services on shutdown"""
-    global connection_manager, room_manager, message_handler
+    global connection_manager, room_manager, message_handler, translation_service
     
     try:
         if message_handler:
@@ -597,6 +635,10 @@ async def cleanup_websocket_services():
         if room_manager:
             await room_manager.stop_cleanup_task()
             logger.log_message_event("cleanup_task_stopped", None, None, "room_manager")
+        
+        if translation_service:
+            await translation_service.cleanup()
+            logger.log_message_event("cleanup_completed", None, None, "translation_service")
         
         logger.log_message_event("cleanup_completed", None, None, "websocket_services")
         
@@ -608,3 +650,4 @@ async def cleanup_websocket_services():
         connection_manager = None
         room_manager = None
         message_handler = None
+        translation_service = None
