@@ -11,7 +11,8 @@ and production settings with appropriate defaults and validation.
 
 import os
 from typing import Optional
-from pydantic import BaseSettings, Field, validator
+from pydantic_settings import BaseSettings
+from pydantic import Field, validator
 
 
 class AIServiceConfig(BaseSettings):
@@ -60,7 +61,7 @@ class AIServiceConfig(BaseSettings):
     
     # Translation Service Configuration
     translation_enabled: bool = Field(
-        default=True,
+        default=True,  # Enabled by default when API key is available
         description="Whether translation service is enabled"
     )
     
@@ -81,12 +82,13 @@ class AIServiceConfig(BaseSettings):
     )
     
     @validator("groq_api_key")
-    def validate_groq_api_key(cls, v: str) -> str:
+    def validate_groq_api_key(cls, v: str, values: dict) -> str:
         """
         Validate that Groq API key is provided when translation is enabled.
         
         Args:
             v: The API key value to validate
+            values: Dictionary containing other field values
             
         Returns:
             The validated API key
@@ -94,7 +96,8 @@ class AIServiceConfig(BaseSettings):
         Raises:
             ValueError: If API key is missing when translation is enabled
         """
-        if not v and cls.translation_enabled:
+        translation_enabled = values.get("translation_enabled", False)
+        if not v and translation_enabled:
             raise ValueError("GROQ_API_KEY is required when translation is enabled")
         return v
     
