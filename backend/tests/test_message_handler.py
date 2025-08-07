@@ -33,13 +33,17 @@ def room_manager():
 @pytest.fixture
 def connection_manager(room_manager):
     """Create a mock ConnectionManager"""
-    return ConnectionManager(room_manager)
+    from app.services.rate_limiter import RateLimiter, RateLimitConfig
+    rate_limiter = RateLimiter(RateLimitConfig())
+    return ConnectionManager(room_manager, rate_limiter)
 
 
 @pytest.fixture
 def message_handler(connection_manager, room_manager):
     """Create MessageHandler with mocked dependencies"""
-    return MessageHandler(connection_manager, room_manager)
+    from app.services.rate_limiter import RateLimiter, RateLimitConfig
+    rate_limiter = RateLimiter(RateLimitConfig())
+    return MessageHandler(connection_manager, room_manager, rate_limiter)
 
 
 @pytest.fixture
@@ -214,7 +218,7 @@ async def test_handle_typing_message_start_typing(message_handler, mock_connecti
     message = TypingMessage(
         user_id="test_user_123",
         room_id="test-room-456",
-        is_typing=True
+        isTyping=True
     )
     
     # Mock dependencies
@@ -244,7 +248,7 @@ async def test_handle_typing_message_stop_typing(message_handler, mock_connectio
     message = TypingMessage(
         user_id="test_user_123",
         room_id="test-room-456",
-        is_typing=False
+        isTyping=False
     )
     
     # Mock dependencies

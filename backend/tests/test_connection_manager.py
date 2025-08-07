@@ -54,7 +54,7 @@ async def test_connect_new_user(connection_manager, mock_websocket):
     assert connection.websocket == mock_websocket
     
     # Verify room was created
-    assert room_id in connection_manager.rooms
+    assert room_id in connection_manager.room_manager.rooms
     room = connection_manager.get_room(room_id)
     assert room.get_connection_count() == 1
     
@@ -112,13 +112,13 @@ async def test_disconnect_last_user_deletes_room(connection_manager):
     
     # Connect user
     await connection_manager.connect(ws, room_id, "user1")
-    assert room_id in connection_manager.rooms
+    assert room_id in connection_manager.room_manager.rooms
     
     # Disconnect user
     await connection_manager.disconnect(ws)
     
     # Verify room was deleted
-    assert room_id not in connection_manager.rooms
+    assert room_id not in connection_manager.room_manager.rooms
 
 
 @pytest.mark.asyncio

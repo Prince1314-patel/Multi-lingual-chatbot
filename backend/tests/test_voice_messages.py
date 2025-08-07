@@ -53,12 +53,12 @@ async def test_handle_binary_message_success(message_handler, connection_manager
     # Setup
     binary_data = b"fake_audio_data_12345"
     connection_manager.connection_lookup[mock_websocket] = sample_connection
-    connection_manager.rooms["test-room"] = MagicMock()
-    connection_manager.rooms["test-room"].get_all_connections.return_value = {
+    connection_manager.room_manager.rooms["test-room"] = MagicMock()
+    connection_manager.room_manager.rooms["test-room"].get_all_connections.return_value = {
         "test_user": sample_connection
     }
-    connection_manager.rooms["test-room"].update_activity = MagicMock()
-    connection_manager.rooms["test-room"].increment_message_count = MagicMock()
+    connection_manager.room_manager.rooms["test-room"].update_activity = MagicMock()
+    connection_manager.room_manager.rooms["test-room"].increment_message_count = MagicMock()
     
     # Mock broadcast_to_room to return success
     connection_manager.broadcast_to_room = AsyncMock(return_value=1)
@@ -196,7 +196,7 @@ async def test_broadcast_voice_message_to_room(connection_manager, room_manager)
     room.add_connection(conn1)
     room.add_connection(conn2)
     
-    connection_manager.rooms[room_id] = room
+    connection_manager.room_manager.rooms[room_id] = room
     connection_manager.connection_lookup[ws1] = conn1
     connection_manager.connection_lookup[ws2] = conn2
     

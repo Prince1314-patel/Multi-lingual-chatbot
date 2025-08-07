@@ -38,13 +38,15 @@ def connection_manager(room_manager):
     """Create a ConnectionManager"""
     from app.services.rate_limiter import RateLimiter, RateLimitConfig
     rate_limiter = RateLimiter(RateLimitConfig())
-    return ConnectionManager(rate_limiter)
+    return ConnectionManager(room_manager, rate_limiter)
 
 
 @pytest.fixture
 def message_handler(connection_manager, room_manager):
     """Create MessageHandler with dependencies"""
-    return MessageHandler(connection_manager, room_manager)
+    from app.services.rate_limiter import RateLimiter, RateLimitConfig
+    rate_limiter = RateLimiter(RateLimitConfig())
+    return MessageHandler(connection_manager, room_manager, rate_limiter)
 
 
 @pytest.fixture
@@ -78,7 +80,7 @@ async def test_typing_indicator_broadcasting_logic(message_handler, mock_connect
     typing_message = TypingMessage(
         user_id="test_user_123",
         room_id="test-room-456",
-        is_typing=True
+        isTyping=True
     )
     
     # Mock dependencies
@@ -128,7 +130,7 @@ async def test_typing_timeout_after_3_seconds(message_handler, mock_connection):
     call_args = message_handler.connection_manager.broadcast_to_room.call_args
     broadcasted_message = call_args[0][1]
     assert isinstance(broadcasted_message, TypingMessage)
-    assert broadcasted_message.is_typing is False
+    assert broadcasted_message.isTyping is False
     assert broadcasted_message.user_id == "test_user_123"
 
 
@@ -285,7 +287,7 @@ async def test_typing_indicator_no_persistent_storage(message_handler, mock_conn
     typing_message = TypingMessage(
         user_id="test_user_123",
         room_id="test-room-456",
-        is_typing=True
+        isTyping=True
     )
     
     # Mock dependencies

@@ -65,7 +65,9 @@ class MessageHandler:
             # Enrich message data with trusted connection data BEFORE deserialization
             # This ensures Pydantic validation passes with required fields
             message_data['user_id'] = connection.user_id
-            message_data['room_id'] = connection.room_id
+            # Only set room_id if not already provided (for validation purposes)
+            if 'room_id' not in message_data:
+                message_data['room_id'] = connection.room_id
             # Always generate server-side timestamp to ensure consistency (as datetime object)
             message_data['timestamp'] = datetime.utcnow()
             # --- END: CORRECTED LOGIC ---
