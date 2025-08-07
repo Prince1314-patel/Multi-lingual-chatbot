@@ -6,6 +6,10 @@ import logging
 import sys
 import traceback
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 from app.utils import get_current_time_iso
 
 from app.websocket import websocket_router, init_websocket_services, cleanup_websocket_services
