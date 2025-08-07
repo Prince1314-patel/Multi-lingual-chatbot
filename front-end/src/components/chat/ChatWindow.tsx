@@ -100,7 +100,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser, userPreferences }: 
         lang: (typeof data.lang === 'string' ? data.lang : 'en'),
         display_name: typeof data.display_name === 'string' ? data.display_name : undefined,
         timestamp: (typeof data.timestamp === 'string' ? new Date(data.timestamp).toISOString() : new Date().toISOString()),
-        status: 'sent',
+        status: (typeof data.status === 'string' ? data.status as "sending" | "sent" | "delivered" | "failed" | "read" : 'sent'),
         // Add translation fields
         translated_content: typeof data.translated_content === 'string' ? data.translated_content : undefined,
         target_language: typeof data.target_language === 'string' ? data.target_language : undefined,
@@ -128,7 +128,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser, userPreferences }: 
             ? { 
                 ...msg, 
                 timestamp: message.timestamp, 
-                status: 'sent' as const,
+                status: message.status,
                 // Update translation fields if available
                 ...(message.translated_content && { translated_content: message.translated_content }),
                 ...(message.target_language && { target_language: message.target_language }),
@@ -162,10 +162,13 @@ export const ChatWindow = ({ roomId, currentUser, otherUser, userPreferences }: 
             setMessages(prev => [...prev, baseVoiceMessage]);
           } else {
             // If this is our own message echoed back, include status and update existing message
-            const voiceMessage: VoiceMessage = { ...baseVoiceMessage, status: 'sent' as const };
+            const voiceMessage: VoiceMessage = { 
+              ...baseVoiceMessage, 
+              status: (typeof data.status === 'string' ? data.status as "sending" | "sent" | "delivered" | "failed" | "read" : 'sent') as const 
+            };
             setMessages(prev => prev.map(msg =>
               'id' in msg && 'from' in msg && msg.id === voiceMessage.id && msg.from === currentUser
-                ? { ...msg, timestamp: voiceMessage.timestamp, status: 'sent' as const }
+                ? { ...msg, timestamp: voiceMessage.timestamp, status: voiceMessage.status }
                 : msg
             ));
           }

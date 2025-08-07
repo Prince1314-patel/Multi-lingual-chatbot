@@ -47,7 +47,12 @@ class MessageHandler:
         self.room_manager = room_manager
         self.rate_limiter = rate_limiter
         self.translation_service = translation_service
-        self.typing_timeouts: Dict[str, Dict[str, asyncio.Task]] = {}  # room_id -> user_id -> timeout_task
+        
+        # Typing indicator management
+        self.typing_timeouts: Dict[str, Dict[str, asyncio.Task]] = {}
+        
+        # Translation progress tracking
+        self.translation_in_progress: Set[str] = set()  # Track rooms with active translations
     
     async def handle_message(self, websocket: WebSocket, message_data: dict) -> bool:
         """
@@ -208,6 +213,17 @@ class MessageHandler:
             # Update connection activity
             connection.update_activity()
             
+            # Set typing to false when user sends a message (this will prevent typing timeout)
+            connection.set_typing(False)
+            
+            # Cancel any existing typing timeout for this user
+            room_id = connection.room_id
+            user_id = connection.user_id
+            if (room_id in self.typing_timeouts and 
+                user_id in self.typing_timeouts[room_id]):
+                self.typing_timeouts[room_id][user_id].cancel()
+                del self.typing_timeouts[room_id][user_id]
+            
             # Validate message content
             if not message.content or not message.content.strip():
                 await self.connection_manager.send_error(
@@ -240,18 +256,17 @@ class MessageHandler:
                                 break
                     
                     if needs_translation:
-                        # Set initial translation status
-                        message.translation_status = "processing"
+                        # Don't broadcast original message immediately when translation is needed
+                        # Instead, process translation and send personalized messages to each user
+                        logger.info(f"🔄 Translation needed, processing personalized messages for each user")
                         
-                        # Broadcast original message immediately
-                        sent_count = await self.connection_manager.broadcast_to_room(
-                            connection.room_id, message, exclude_user=connection.user_id, send_confirmation=True
-                        )
+                        # Mark translation as in progress for this room
+                        self.translation_in_progress.add(connection.room_id)
                         
                         # Process translation asynchronously for each user
                         asyncio.create_task(self._process_translation_for_all_users(connection, message))
                         
-                        logger.info(f"Text message from {connection.user_id} broadcasted to {sent_count} users in room {connection.room_id} (translation pending)")
+                        logger.info(f"Text message from {connection.user_id} - translation processing started for room {connection.room_id}")
                         return True
                     else:
                         logger.info(f"⏭️  No translation needed: all users have same preferred language or no preferences")
@@ -402,7 +417,7 @@ class MessageHandler:
         # Set new timeout if user is typing
         if is_typing:
             timeout_task = asyncio.create_task(
-                self._typing_timeout_handler(connection, 3.0)  # 3 second timeout
+                self._typing_timeout_handler(connection, 30.0)  # Increased to 30 seconds to avoid interference with translation
             )
             self.typing_timeouts[room_id][user_id] = timeout_task
     
@@ -422,18 +437,25 @@ class MessageHandler:
                 # Set typing to false
                 connection.set_typing(False)
                 
-                # Send typing stopped message to other users
-                typing_message = TypingMessage(
-                    user_id=connection.user_id,
-                    room_id=connection.room_id,
-                    isTyping=False
-                )
-                
-                await self.connection_manager.broadcast_to_room(
-                    connection.room_id, typing_message, exclude_user=connection.user_id
-                )
-                
-                logger.debug(f"Typing timeout for user {connection.user_id} in room {connection.room_id}")
+                # Don't send typing stopped message if translation is in progress
+                if connection.room_id in self.translation_in_progress:
+                    logger.debug(f"Skipping typing timeout message for user {connection.user_id} - translation in progress")
+                else:
+                    # Send typing stopped message to other users
+                    typing_message = TypingMessage(
+                        user_id=connection.user_id,
+                        room_id=connection.room_id,
+                        isTyping=False
+                    )
+                    
+                    await self.connection_manager.broadcast_to_room(
+                        connection.room_id, typing_message, exclude_user=connection.user_id
+                    )
+                    
+                    logger.debug(f"Typing timeout for user {connection.user_id} in room {connection.room_id}")
+            else:
+                # User is not typing, just clean up without sending message
+                logger.debug(f"Typing timeout cleanup for user {connection.user_id} in room {connection.room_id} (not typing)")
             
             # Clean up timeout task
             room_id = connection.room_id
@@ -594,7 +616,8 @@ class MessageHandler:
                             translated_content=translation_result.translated_text,
                             target_language=user_connection.preferred_language,
                             translation_status="completed",
-                            translation_error=None
+                            translation_error=None,
+                            status="delivered"
                         )
                         
                         # Send personalized message to this specific user
@@ -617,7 +640,8 @@ class MessageHandler:
                             translated_content=None,
                             target_language=user_connection.preferred_language,
                             translation_status="failed",
-                            translation_error=str(e)
+                            translation_error=str(e),
+                            status="delivered"
                         )
                         
                         await self.connection_manager.send_message(user_connection.websocket, error_message)
@@ -625,9 +649,38 @@ class MessageHandler:
                 else:
                     logger.info(f"⏭️  No translation needed for user {user_id} (same language or no preference)")
                     logger.info(f"📝 Sender prefers: {sender_preferred_lang}, User prefers: {user_connection.preferred_language}")
+                    
+                    # Send original message to users who have same language or no preference
+                    original_message = TextMessage(
+                        id=message.id,
+                        user_id=message.user_id,
+                        room_id=message.room_id,
+                        display_name=message.display_name,
+                        timestamp=message.timestamp,
+                        content=message.content,
+                        lang=message.lang,
+                        translated_content=None,
+                        target_language=None,
+                        translation_status=None,
+                        translation_error=None,
+                        status="delivered"
+                    )
+                    
+                    await self.connection_manager.send_message(user_connection.websocket, original_message)
+                    logger.info(f"📤 Original message sent to user {user_id} (no translation needed)")
             
             logger.info(f"📤 Translation processing completed for message {message.id}")
+            
+            # Remove room from translation in progress
+            if connection.room_id in self.translation_in_progress:
+                self.translation_in_progress.remove(connection.room_id)
+                logger.debug(f"Removed room {connection.room_id} from translation in progress")
             
         except Exception as e:
             logger.error(f"❌ Error in translation processing for all users: {e}")
             logger.error(f"📝 Failed message content: '{message.content}'")
+            
+            # Remove room from translation in progress even on error
+            if connection.room_id in self.translation_in_progress:
+                self.translation_in_progress.remove(connection.room_id)
+                logger.debug(f"Removed room {connection.room_id} from translation in progress (error)")
