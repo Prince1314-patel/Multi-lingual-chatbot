@@ -9,6 +9,7 @@ import { Wifi, WifiOff, RefreshCw, AlertCircle } from "lucide-react";
 import { useWebSocket, WebSocketMessage, WebSocketError } from "@/hooks/useWebSocket";
 import { debugLog } from "@/lib/config";
 import { normalizeTimestampIST } from "@/lib/timezone";
+import { UserPreferences } from "@/lib/userPreferences";
 
 // Helper function to normalize timestamps to consistent IST format
 const normalizeTimestamp = (timestamp: string | undefined): string => {
@@ -19,11 +20,12 @@ interface ChatWindowProps {
   roomId: string;
   currentUser: string;
   otherUser: string;
+  userPreferences: UserPreferences;
 }
 
 
 
-export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) => {
+export const ChatWindow = ({ roomId, currentUser, otherUser, userPreferences }: ChatWindowProps) => {
   const [messages, setMessages] = useState<(Message | VoiceMessage | SystemMessage)[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
@@ -51,7 +53,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
       debugLog('ChatWindow: Disconnected from chat room:', roomId);
     },
     autoReconnect: true
-  });
+  }, userPreferences);
 
   // Handle WebSocket messages
   function handleWebSocketMessage(data: WebSocketMessage) {
@@ -86,6 +88,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
         to: (typeof data.to === 'string' ? data.to : otherUser),
         text: (typeof data.text === 'string' ? data.text : typeof data.content === 'string' ? data.content : ''),
         lang: (typeof data.lang === 'string' ? data.lang : 'en'),
+        display_name: typeof data.display_name === 'string' ? data.display_name : undefined,
         timestamp: (typeof data.timestamp === 'string' ? new Date(data.timestamp).toISOString() : new Date().toISOString()),
         status: 'sent'
       };
@@ -139,11 +142,12 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
     } else if (data.type === 'user_join') {
       // Handle user join notifications
       const userId = typeof data.user_id === 'string' ? data.user_id : 'Unknown User';
+      const displayName = typeof data.display_name === 'string' ? data.display_name : userId;
       setConnectedUsers(prev => new Set([...prev, userId]));
 
       const systemMessage: SystemMessage = {
         type: 'system',
-        content: `${userId} joined the chat`,
+        content: `${displayName} joined the chat`,
         timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString()
       };
 
@@ -151,6 +155,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
     } else if (data.type === 'user_leave') {
       // Handle user leave notifications
       const userId = typeof data.user_id === 'string' ? data.user_id : 'Unknown User';
+      const displayName = typeof data.display_name === 'string' ? data.display_name : userId;
       setConnectedUsers(prev => {
         const newSet = new Set(prev);
         newSet.delete(userId);
@@ -159,7 +164,7 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
 
       const systemMessage: SystemMessage = {
         type: 'system',
-        content: `${userId} left the chat`,
+        content: `${displayName} left the chat`,
         timestamp: typeof data.timestamp === 'string' ? data.timestamp : new Date().toISOString()
       };
 
@@ -252,11 +257,12 @@ export const ChatWindow = ({ roomId, currentUser, otherUser }: ChatWindowProps) 
     // Add message with sending status
     setMessages(prev => [...prev, message]);
 
-    // Send to WebSocket using the backend's expected format (no timestamp - server will generate)
+    // Send to WebSocket using the backend's expected format with target language
     const success = sendWebSocketMessage({
       id: messageId,
       type: 'text',
-      content: text
+      content: text,
+      target_language: userPreferences.preferredLanguage
     });
 
     if (!success) {

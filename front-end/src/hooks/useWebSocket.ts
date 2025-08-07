@@ -34,7 +34,8 @@ export interface UseWebSocketReturn {
 
 export const useWebSocket = (
   roomId: string,
-  options: UseWebSocketOptions = {}
+  options: UseWebSocketOptions = {},
+  userPreferences?: { displayName?: string; preferredLanguage?: string }
 ): UseWebSocketReturn => {
   const {
     onMessage,
@@ -100,9 +101,10 @@ export const useWebSocket = (
     clearTimeouts();
 
     try {
-      const wsUrl = getWebSocketUrl(roomId);
+      const wsUrl = getWebSocketUrl(roomId, userPreferences);
       debugLog('Connecting to WebSocket:', wsUrl);
       debugLog('Current window location:', typeof window !== 'undefined' ? window.location.href : 'SSR');
+      debugLog('User preferences:', userPreferences);
       
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;

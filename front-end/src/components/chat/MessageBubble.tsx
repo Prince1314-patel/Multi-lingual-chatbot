@@ -11,6 +11,10 @@ export interface Message {
   to: string;
   text?: string;
   lang: string;
+  display_name?: string;
+  translated_content?: string;
+  target_language?: string;
+  translation_status?: "pending" | "processing" | "completed" | "failed";
   timestamp: string;
   status: "sending" | "sent" | "delivered" | "failed" | "read";
 }
@@ -481,13 +485,13 @@ export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = 
       "flex flex-col max-w-[70%] mb-4",
       isCurrentUser ? "ml-auto items-end" : "mr-auto items-start"
     )}>
-      {/* Show user ID when more than 2 users are connected */}
-      {connectedUsersCount > 2 && (
+      {/* Show user name when more than 2 users are connected or when display name is available */}
+      {(connectedUsersCount > 2 || regularMessage.display_name) && (
         <div className={cn(
           "text-xs text-muted-foreground mb-1 px-1",
           isCurrentUser ? "text-right" : "text-left"
         )}>
-          {regularMessage.from}
+          {regularMessage.display_name || regularMessage.from}
         </div>
       )}
       <div className={cn(
@@ -496,7 +500,32 @@ export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = 
           ? "bg-message-user text-message-user-foreground rounded-br-sm"
           : "bg-message-other text-message-other-foreground border rounded-bl-sm"
       )}>
+        {/* Original message */}
         <p className="text-sm">{regularMessage.text}</p>
+        
+        {/* Translation if available */}
+        {regularMessage.translated_content && regularMessage.translation_status === 'completed' && (
+          <div className="mt-2 pt-2 border-t border-muted/30">
+            <p className="text-sm opacity-80 italic">{regularMessage.translated_content}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Translated to {regularMessage.target_language}
+            </p>
+          </div>
+        )}
+        
+        {/* Translation status indicator */}
+        {regularMessage.translation_status === 'processing' && (
+          <div className="mt-2 pt-2 border-t border-muted/30">
+            <p className="text-xs text-muted-foreground italic">Translating...</p>
+          </div>
+        )}
+        
+        {/* Translation error */}
+        {regularMessage.translation_status === 'failed' && (
+          <div className="mt-2 pt-2 border-t border-muted/30">
+            <p className="text-xs text-destructive italic">Translation failed</p>
+          </div>
+        )}
       </div>
 
       <div className={cn(
