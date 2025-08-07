@@ -55,7 +55,7 @@ class TranslationRequest:
     user_id: str
     room_id: str
     message_id: str
-    timestamp: datetime
+    timestamp: Any  # Using Any to avoid circular import issues
 
 
 @dataclass
@@ -81,7 +81,7 @@ class TranslationResult:
     target_language: str
     confidence: float
     processing_time: float
-    timestamp: datetime
+    timestamp: Any  # Using Any to avoid circular import issues
 
 
 class TranslationService(BaseAIService[TranslationResult]):
