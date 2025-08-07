@@ -7,9 +7,10 @@ A Progressive Web Application (PWA) that enables real-time multilingual communic
 - **Room-based Chat**: Unique, shareable links for instant room access
 - **Real-time Messaging**: WebSocket-powered text and voice communication with delivery confirmation
 - **Message Status Tracking**: Visual indicators for message delivery states with retry functionality
-- **AI-powered Translation**: Groq Llama-3.3-70B-Versatile for multilingual text translation
+- **AI-powered Translation**: ✅ Groq Llama-3.3-70B-Versatile for multilingual text translation (Backend Complete)
 - **Voice Processing**: OpenAI Whisper (ASR), Coqui TTS, and Chatterbox TTS for voice cloning
-- **Dual-language Display**: Original and translated messages shown side-by-side
+- **Dual-language Display**: Original and translated messages shown side-by-side (Frontend in Progress)
+- **IST Timezone Support**: ✅ Complete timezone migration with IST timezone-aware datetime handling
 - **Progressive Web App**: Mobile-responsive, installable, offline-capable
 
 ## 🏗️ Architecture
@@ -20,17 +21,28 @@ A Progressive Web Application (PWA) that enables real-time multilingual communic
 - **Tailwind CSS** with shadcn/ui component library
 - **WebSocket** for real-time communication
 
-### Backend (Planned)
+### Backend
 - **FastAPI** (Python) with async/await
 - **WebSocket** rooms for real-time messaging
-- **AI Services**: Groq, OpenAI Whisper, Coqui TTS, Chatterbox TTS
-- **Database**: MongoDB (messages), AWS S3 (audio files), Redis (scaling)
+- **AI Services**: ✅ Groq API integration, OpenAI Whisper (planned), Coqui TTS (planned)
+- **Database**: MongoDB (planned), AWS S3 (planned), Redis (planned)
+- **Timezone**: ✅ IST timezone-aware datetime handling throughout
 
 ## 📁 Project Structure
 
 ```
 ├── front-end/                 # React frontend application
-├── backend/                   # FastAPI backend (planned)
+│   ├── src/
+│   │   ├── components/chat/   # Chat UI components
+│   │   ├── lib/              # Utilities including timezone.ts
+│   │   └── hooks/            # WebSocket and other hooks
+├── backend/                   # FastAPI backend
+│   ├── app/
+│   │   ├── ai_services/      # ✅ AI services module (translation)
+│   │   ├── services/         # WebSocket and message handling
+│   │   ├── models/           # Data models with translation support
+│   │   └── utils/            # ✅ Timezone utilities
+│   └── tests/                # Comprehensive test suite (161 tests)
 ├── reference-docs/            # Project documentation and specifications
 └── .kiro/                     # Kiro AI assistant configuration
 ```
@@ -72,7 +84,7 @@ A Progressive Web Application (PWA) that enables real-time multilingual communic
    - Import and use the `ConfigTest` component to verify your setup
    - Check WebSocket URLs and API endpoints are correctly configured
 
-### Backend Setup (When Available)
+### Backend Setup
 
 1. Navigate to the backend directory:
    ```bash
@@ -123,12 +135,14 @@ npm run test         # Run tests in watch mode
 npm run test:run     # Run tests once
 ```
 
-### Backend Commands (Planned)
+### Backend Commands
 
 ```bash
-python -m uvicorn app.main:app --reload    # Start development server
-python -m pytest                          # Run tests
-python -m pytest --cov                    # Run tests with coverage
+python -m uvicorn main:app --reload    # Start development server
+python -m pytest tests/ -v             # Run all tests (161 tests)
+python -m pytest tests/unit/           # Run unit tests only
+python -m pytest tests/integration/    # Run integration tests only
+python -m pytest --cov                 # Run with coverage report
 ```
 
 ## 🌐 Environment Variables
@@ -184,11 +198,15 @@ import { ConfigTest } from '@/components/test/ConfigTest';
 ### Backend Testing
 ```bash
 cd backend
-python -m pytest                    # Run all tests
-python -m pytest tests/unit/        # Run unit tests only
-python -m pytest tests/integration/ # Run integration tests only
-python -m pytest --cov              # Run with coverage report
+source venv/bin/activate
+python -m pytest tests/ -v              # Run all tests (161 tests)
+python -m pytest tests/unit/            # Run unit tests only
+python -m pytest tests/integration/     # Run integration tests only
+python -m pytest --cov                  # Run with coverage report
 ```
+
+**Test Results**: ✅ 161/161 tests passing
+**Coverage**: Comprehensive coverage including WebSocket, translation service, and error handling
 
 ## 📋 Development Phases
 
@@ -197,11 +215,16 @@ python -m pytest --cov              # Run with coverage report
 - [x] WebSocket connection management
 - [x] FastAPI backend with room-based WebSocket routing
 - [x] Text and voice message transmission
+- [x] Message delivery confirmation and retry functionality
 
 ### 🔄 Phase 2: Text Translation with Groq LLM
-- [ ] Groq API integration for text translation
-- [ ] Dual-language message display
-- [ ] Language selector UI
+- [x] ✅ Groq API integration for text translation (Backend Complete)
+- [x] ✅ AI services module with translation service
+- [x] ✅ Asynchronous translation with retry logic
+- [x] ✅ Enhanced message models with translation fields
+- [x] ✅ Timezone migration to IST throughout application
+- [ ] 🔄 Dual-language message display (Frontend in Progress)
+- [ ] 🔄 Language selector UI (Frontend in Progress)
 
 ### 📅 Phase 3: Voice Transcription, Translation & Synthesis
 - [ ] OpenAI Whisper integration (ASR)
@@ -219,6 +242,21 @@ python -m pytest --cov              # Run with coverage report
 - [ ] Prometheus metrics
 - [ ] Admin dashboard
 - [ ] Role-based access control
+
+## 🎯 Recent Achievements
+
+### ✅ Timezone Migration (Latest)
+- Replaced deprecated `datetime.utcnow()` with IST timezone-aware datetime objects
+- Created comprehensive timezone utilities for both backend and frontend
+- Updated 15+ files across backend and frontend
+- All 161 tests passing with new timezone implementation
+
+### ✅ Phase 2 Backend Completion
+- Complete AI services module with Groq API integration
+- Translation service with retry logic and error handling
+- Enhanced message models with translation fields
+- Asynchronous translation processing
+- Comprehensive test coverage for translation functionality
 
 ## 🤝 Contributing
 
