@@ -228,11 +228,15 @@ class MessageHandler:
                     
                     # Check if any users need translation (different preferred language than sender)
                     needs_translation = False
+                    sender_preferred_lang = connection.preferred_language
+                    
                     for user_id, user_connection in connections.items():
                         if user_id != connection.user_id:  # Skip sender
                             if (user_connection.preferred_language and 
-                                user_connection.preferred_language != message.lang):
+                                sender_preferred_lang and
+                                user_connection.preferred_language != sender_preferred_lang):
                                 needs_translation = True
+                                logger.info(f"🔄 Translation needed: sender prefers {sender_preferred_lang}, user {user_id} prefers {user_connection.preferred_language}")
                                 break
                     
                     if needs_translation:
@@ -249,6 +253,8 @@ class MessageHandler:
                         
                         logger.info(f"Text message from {connection.user_id} broadcasted to {sent_count} users in room {connection.room_id} (translation pending)")
                         return True
+                    else:
+                        logger.info(f"⏭️  No translation needed: all users have same preferred language or no preferences")
             
             # No translation needed, broadcast immediately
             sent_count = await self.connection_manager.broadcast_to_room(
@@ -547,11 +553,15 @@ class MessageHandler:
                 if user_id == connection.user_id:
                     continue  # Skip sender
                 
-                # Check if this user needs translation
+                # Check if this user needs translation (different preferred language than sender)
+                sender_preferred_lang = connection.preferred_language
                 if (user_connection.preferred_language and 
-                    user_connection.preferred_language != message.lang):
+                    sender_preferred_lang and
+                    user_connection.preferred_language != sender_preferred_lang):
                     
                     logger.info(f"🔄 Translating for user {user_id} to {user_connection.preferred_language}")
+                    logger.info(f"📝 Sender ({connection.user_id}) prefers: {sender_preferred_lang}")
+                    logger.info(f"📝 Receiver ({user_id}) prefers: {user_connection.preferred_language}")
                     
                     try:
                         # Create translation request for this specific user
@@ -614,6 +624,7 @@ class MessageHandler:
                 
                 else:
                     logger.info(f"⏭️  No translation needed for user {user_id} (same language or no preference)")
+                    logger.info(f"📝 Sender prefers: {sender_preferred_lang}, User prefers: {user_connection.preferred_language}")
             
             logger.info(f"📤 Translation processing completed for message {message.id}")
             
