@@ -500,31 +500,16 @@ export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = 
           ? "bg-message-user text-message-user-foreground rounded-br-sm"
           : "bg-message-other text-message-other-foreground border rounded-bl-sm"
       )}>
-        {/* Original message */}
-        <p className="text-sm">{regularMessage.text}</p>
-        
-        {/* Translation if available */}
-        {regularMessage.translated_content && regularMessage.translation_status === 'completed' && (
-          <div className="mt-2 pt-2 border-t border-muted/30">
-            <p className="text-sm opacity-80 italic">{regularMessage.translated_content}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Translated to {regularMessage.target_language}
-            </p>
-          </div>
-        )}
-        
-        {/* Translation status indicator */}
-        {regularMessage.translation_status === 'processing' && (
-          <div className="mt-2 pt-2 border-t border-muted/30">
-            <p className="text-xs text-muted-foreground italic">Translating...</p>
-          </div>
-        )}
-        
-        {/* Translation error */}
-        {regularMessage.translation_status === 'failed' && (
-          <div className="mt-2 pt-2 border-t border-muted/30">
-            <p className="text-xs text-destructive italic">Translation failed</p>
-          </div>
+        {/* For current user's messages: show original text */}
+        {/* For other users' messages: show translated text if available, otherwise original text */}
+        {isCurrentUser ? (
+          <p className="text-sm">{regularMessage.text}</p>
+        ) : (
+          <p className="text-sm">
+            {regularMessage.translated_content && regularMessage.translation_status === 'completed' 
+              ? regularMessage.translated_content 
+              : regularMessage.text}
+          </p>
         )}
       </div>
 
