@@ -14,7 +14,7 @@ import logging
 import hashlib
 import json
 from typing import Dict, List, Optional, Tuple, Any
-from datetime import timedelta
+from datetime import timedelta, datetime
 from dataclasses import dataclass
 
 from ..utils import get_current_time
@@ -514,11 +514,18 @@ class TranslationService(BaseAIService[TranslationResult]):
             translated_text = response.choices[0].message.content.strip()
             
             # Validate translation
-            if not translated_text or translated_text == text:
+            if not translated_text:
                 raise AIServiceError(
                     self.service_name, "api_call",
-                    "Invalid translation result"
+                    "Empty translation result"
                 )
+            
+            # Only flag as invalid if translation is identical AND languages are different
+            # This allows for valid cases like same source/target language or proper nouns
+            if translated_text == text and source_lang != target_lang:
+                # Additional check: if text is very short (likely a proper noun), allow it
+                if len(text.strip()) > 3:  # Only flag longer identical texts as potentially invalid
+                    logger.warning(f"Translation unchanged for different languages: {source_lang} -> {target_lang}")
             
             return translated_text
             
@@ -620,7 +627,7 @@ Translation:"""
         }
         
         cache_string = json.dumps(cache_data, sort_keys=True)
-        return hashlib.md5(cache_string.encode()).hexdigest()
+        return hashlib.sha256(cache_string.encode()).hexdigest()
     
     def clear_cache(self) -> None:
         """Clear the translation cache."""
