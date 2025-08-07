@@ -49,7 +49,11 @@ describe('ChatWindow User Notifications', () => {
   const defaultProps = {
     roomId: 'test-room',
     currentUser: 'user1',
-    otherUser: 'user2'
+    otherUser: 'user2',
+    userPreferences: {
+      displayName: 'Test User',
+      preferredLanguage: 'en'
+    }
   };
 
   beforeEach(() => {

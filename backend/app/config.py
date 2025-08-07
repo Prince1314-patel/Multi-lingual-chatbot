@@ -21,8 +21,7 @@ class Settings(BaseSettings):
     cors_origins: List[str] = Field(
         default=["http://localhost:8080", "http://127.0.0.1:8080"],
         env="CORS_ORIGINS"
-  
-   )
+    )
     cors_allow_credentials: bool = Field(default=True, env="CORS_ALLOW_CREDENTIALS")
     cors_allow_methods: List[str] = Field(default=["*"], env="CORS_ALLOW_METHODS")
     cors_allow_headers: List[str] = Field(default=["*"], env="CORS_ALLOW_HEADERS")
@@ -37,6 +36,9 @@ class Settings(BaseSettings):
     max_message_size: int = Field(default=1024 * 1024, env="MAX_MESSAGE_SIZE")  # 1MB
     max_voice_message_size: int = Field(default=5 * 1024 * 1024, env="MAX_VOICE_MESSAGE_SIZE")  # 5MB
     typing_timeout: int = Field(default=3, env="TYPING_TIMEOUT")  # 3 seconds
+    
+    # AI Services Configuration
+    groq_api_key: Optional[str] = Field(default=None, env="GROQ_API_KEY", description="API key for Groq services")
     
     # Logging Configuration
     log_file: str = Field(default="backend.log", env="LOG_FILE")
