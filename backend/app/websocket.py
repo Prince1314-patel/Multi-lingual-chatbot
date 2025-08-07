@@ -28,7 +28,7 @@ memory_optimizer: Optional[MemoryOptimizer] = None
 translation_service: Optional[TranslationService] = None
 
 
-def init_websocket_services():
+async def init_websocket_services():
     """Initialize WebSocket services - called from main.py"""
     global connection_manager, room_manager, message_handler, rate_limiter, memory_optimizer, translation_service
     
@@ -42,9 +42,14 @@ def init_websocket_services():
     )
     rate_limiter = RateLimiter(rate_limit_config)
     
+    # Start the rate limiter
+    await rate_limiter.start()
+    
     # Initialize translation service
     try:
         translation_service = TranslationService(ai_config)
+        # Initialize the translation service asynchronously
+        await translation_service.initialize()
         logger.log_message_event("service_initialized", None, None, "translation_service")
     except Exception as e:
         logger.log_warning(f"Failed to initialize translation service: {e}")
@@ -634,7 +639,7 @@ async def websocket_health_check():
 # Cleanup function for graceful shutdown
 async def cleanup_websocket_services():
     """Clean up WebSocket services on shutdown"""
-    global connection_manager, room_manager, message_handler, translation_service
+    global connection_manager, room_manager, message_handler, translation_service, rate_limiter
     
     try:
         if message_handler:
@@ -644,6 +649,10 @@ async def cleanup_websocket_services():
         if room_manager:
             await room_manager.stop_cleanup_task()
             logger.log_message_event("cleanup_task_stopped", None, None, "room_manager")
+        
+        if rate_limiter:
+            await rate_limiter.stop()
+            logger.log_message_event("cleanup_completed", None, None, "rate_limiter")
         
         if translation_service:
             await translation_service.cleanup()
@@ -660,3 +669,4 @@ async def cleanup_websocket_services():
         room_manager = None
         message_handler = None
         translation_service = None
+        rate_limiter = None

@@ -89,7 +89,7 @@ async def startup_event():
     """Initialize services on application startup with error handling"""
     try:
         logger.log_message_event("startup_initiated", None, None, "system")
-        init_websocket_services()
+        await init_websocket_services()
         logger.log_message_event("startup_completed", None, None, "system")
     except Exception as e:
         logger.log_error(

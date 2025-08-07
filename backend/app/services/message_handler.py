@@ -238,6 +238,23 @@ class MessageHandler:
                 
                 logger.info(f"Text message from {connection.user_id} broadcasted to {sent_count} users in room {connection.room_id} (translation pending)")
                 return True
+            elif (self.translation_service and 
+                  self.translation_service.enabled and 
+                  message.target_language):
+                # Translation service is available and target language is specified
+                # Set initial translation status
+                message.translation_status = "processing"
+                
+                # Broadcast original message immediately
+                sent_count = await self.connection_manager.broadcast_to_room(
+                    connection.room_id, message, exclude_user=connection.user_id, send_confirmation=True
+                )
+                
+                # Process translation asynchronously
+                asyncio.create_task(self._process_translation(connection, message))
+                
+                logger.info(f"Text message from {connection.user_id} broadcasted to {sent_count} users in room {connection.room_id} (translation pending)")
+                return True
             else:
                 # No translation needed, broadcast immediately
                 sent_count = await self.connection_manager.broadcast_to_room(
@@ -526,7 +543,7 @@ class MessageHandler:
             # Create translation request
             translation_request = TranslationRequest(
                 text=message.content,
-                source_language=message.lang,
+                source_language=None,  # Let the service detect the language automatically
                 target_language=message.target_language,
                 user_id=connection.user_id,
                 room_id=connection.room_id,
