@@ -112,7 +112,9 @@ def get_client_ip(websocket: WebSocket) -> Optional[str]:
 async def websocket_chat_endpoint(
     websocket: WebSocket,
     room_id: str,
-    user_id: Optional[str] = None
+    user_id: Optional[str] = None,
+    display_name: Optional[str] = None,
+    preferred_language: Optional[str] = None
 ):
     """
     WebSocket endpoint for chat rooms with comprehensive error handling
@@ -121,6 +123,8 @@ async def websocket_chat_endpoint(
         websocket: WebSocket connection
         room_id: The chat room ID to join
         user_id: Optional user ID (will generate if not provided)
+        display_name: Optional display name for the user
+        preferred_language: Optional preferred language for translation
     """
     error_handler = get_error_handler()
     start_time = time.time()
@@ -174,10 +178,15 @@ async def websocket_chat_endpoint(
     try:
         # Accept WebSocket connection and join room with timeout handling
         try:
-            connection = await conn_mgr.connect(websocket, room_id, user_id, client_ip)
+            connection = await conn_mgr.connect(
+                websocket, room_id, user_id, client_ip, 
+                display_name, preferred_language
+            )
             logger.log_connection_event("established", user_id, room_id, {
                 "connection_time_ms": (time.time() - start_time) * 1000,
-                "client_ip": client_ip
+                "client_ip": client_ip,
+                "display_name": display_name,
+                "preferred_language": preferred_language
             })
         except ConnectionError as e:
             # Connection limit exceeded

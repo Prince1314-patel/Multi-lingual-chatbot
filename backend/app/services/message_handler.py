@@ -78,6 +78,8 @@ class MessageHandler:
                 message_data['room_id'] = connection.room_id
             # Always generate server-side timestamp to ensure consistency (as datetime object)
             message_data['timestamp'] = get_current_time()
+            # Add display name from connection
+            message_data['display_name'] = connection.get_display_name()
             # --- END: CORRECTED LOGIC ---
 
             # Deserialize message (now with all required fields)
@@ -155,6 +157,7 @@ class MessageHandler:
             voice_message = VoiceMessage(
                 user_id=connection.user_id,
                 room_id=connection.room_id,
+                display_name=connection.get_display_name(),
                 audio_data=binary_data,
                 audio_format="webm",  # Default format, could be detected or specified
                 timestamp=get_current_time()  # Server-side timestamp
@@ -211,6 +214,10 @@ class MessageHandler:
                     connection.websocket, "EMPTY_MESSAGE", "Message content cannot be empty"
                 )
                 return False
+            
+            # Set target language based on user preferences if not already set
+            if not message.target_language and connection.preferred_language:
+                message.target_language = connection.preferred_language
             
             # Handle translation if translation service is available and target language is specified
             if (self.translation_service and 

@@ -35,7 +35,8 @@ class ConnectionManager:
         self.rate_limiter = rate_limiter
     
     async def connect(self, websocket: WebSocket, room_id: str, user_id: Optional[str] = None, 
-                     ip_address: Optional[str] = None) -> ConnectionInfo:
+                     ip_address: Optional[str] = None, display_name: Optional[str] = None,
+                     preferred_language: Optional[str] = None) -> ConnectionInfo:
         """
         Accept a WebSocket connection and add it to a room with rate limiting
         
@@ -44,6 +45,8 @@ class ConnectionManager:
             room_id: The room to join
             user_id: Optional user ID, will generate one if not provided
             ip_address: Optional IP address for rate limiting
+            display_name: Optional display name for the user
+            preferred_language: Optional preferred language for translation
             
         Returns:
             ConnectionInfo object for the new connection
@@ -69,11 +72,13 @@ class ConnectionManager:
         if not user_id:
             user_id = generate_user_id()
         
-        # Create connection info
+        # Create connection info with user preferences
         connection = ConnectionInfo(
             websocket=websocket,
             user_id=user_id,
-            room_id=room_id
+            room_id=room_id,
+            display_name=display_name,
+            preferred_language=preferred_language
         )
         
         # Create room if it doesn't exist
@@ -94,7 +99,8 @@ class ConnectionManager:
         # Broadcast user join message to other users in the room
         join_message = UserJoinMessage(
             user_id=user_id,
-            room_id=room_id
+            room_id=room_id,
+            display_name=connection.get_display_name()
         )
         await self.broadcast_to_room(room_id, join_message, exclude_user=user_id)
         
@@ -133,7 +139,8 @@ class ConnectionManager:
             if broadcast_leave and not room.is_empty():
                 leave_message = UserLeaveMessage(
                     user_id=user_id,
-                    room_id=room_id
+                    room_id=room_id,
+                    display_name=connection.get_display_name()
                 )
                 await self.broadcast_to_room(room_id, leave_message)
             
