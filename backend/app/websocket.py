@@ -45,9 +45,9 @@ def init_websocket_services():
     # Initialize translation service
     try:
         translation_service = TranslationService(ai_config)
-        logger.info("Translation service initialized successfully")
+        logger.log_message_event("service_initialized", None, None, "translation_service")
     except Exception as e:
-        logger.warning(f"Failed to initialize translation service: {e}")
+        logger.log_warning(f"Failed to initialize translation service: {e}")
         translation_service = None
     
     # Initialize services with rate limiter and translation service
