@@ -14,8 +14,10 @@ import logging
 import hashlib
 import json
 from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime, timedelta
+from datetime import timedelta
 from dataclasses import dataclass
+
+from ..utils import get_current_time
 
 try:
     from groq import AsyncGroq
@@ -289,7 +291,7 @@ class TranslationService(BaseAIService[TranslationResult]):
                 "Service is not enabled"
             )
         
-        start_time = datetime.utcnow()
+        start_time = get_current_time()
         
         try:
             self._log_operation("translating", 
@@ -300,7 +302,7 @@ class TranslationService(BaseAIService[TranslationResult]):
             cache_key = self._generate_cache_key(request)
             if cache_key in self.cache:
                 cached_result, cache_time = self.cache[cache_key]
-                if datetime.utcnow() - cache_time < timedelta(seconds=self.config.translation_cache_ttl):
+                if get_current_time() - cache_time < timedelta(seconds=self.config.translation_cache_ttl):
                     logger.debug(f"Translation cache hit for key: {cache_key}")
                     return cached_result
             
@@ -313,7 +315,7 @@ class TranslationService(BaseAIService[TranslationResult]):
             translated_text = await self._call_groq_api(request.text, source_language, request.target_language)
             
             # Calculate processing time
-            processing_time = (datetime.utcnow() - start_time).total_seconds()
+            processing_time = (get_current_time() - start_time).total_seconds()
             
             # Create result
             result = TranslationResult(
@@ -323,11 +325,11 @@ class TranslationService(BaseAIService[TranslationResult]):
                 target_language=request.target_language,
                 confidence=0.95,  # Groq doesn't provide confidence scores
                 processing_time=processing_time,
-                timestamp=datetime.utcnow()
+                timestamp=get_current_time()
             )
             
             # Cache the result
-            self.cache[cache_key] = (result, datetime.utcnow())
+            self.cache[cache_key] = (result, get_current_time())
             
             # Update statistics
             self._update_stats(True, processing_time)
@@ -338,7 +340,7 @@ class TranslationService(BaseAIService[TranslationResult]):
             return result
             
         except Exception as e:
-            processing_time = (datetime.utcnow() - start_time).total_seconds()
+            processing_time = (get_current_time() - start_time).total_seconds()
             self._update_stats(False, processing_time)
             
             error = self._handle_api_error(e, "translation")
@@ -395,7 +397,7 @@ class TranslationService(BaseAIService[TranslationResult]):
                         target_language=batch[j].target_language,
                         confidence=0.0,
                         processing_time=0.0,
-                        timestamp=datetime.utcnow()
+                        timestamp=get_current_time()
                     )
                     results.append(error_result)
                 else:

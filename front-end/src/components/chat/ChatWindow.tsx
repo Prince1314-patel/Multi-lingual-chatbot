@@ -8,14 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Wifi, WifiOff, RefreshCw, AlertCircle } from "lucide-react";
 import { useWebSocket, WebSocketMessage, WebSocketError } from "@/hooks/useWebSocket";
 import { debugLog } from "@/lib/config";
+import { normalizeTimestampIST } from "@/lib/timezone";
 
-// Helper function to normalize timestamps to consistent format
+// Helper function to normalize timestamps to consistent IST format
 const normalizeTimestamp = (timestamp: string | undefined): string => {
-  if (!timestamp) return new Date().toISOString();
-  
-  // Parse the timestamp and convert to local ISO string
-  const date = new Date(timestamp);
-  return date.toISOString();
+  return normalizeTimestampIST(timestamp);
 };
 
 interface ChatWindowProps {

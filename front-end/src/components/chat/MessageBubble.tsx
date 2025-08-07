@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useState, useRef, useEffect } from "react";
 import { debugLog } from "@/lib/config";
+import { formatTimeIST } from "@/lib/timezone";
 
 export interface Message {
   id?: string;
@@ -47,12 +48,11 @@ export const MessageBubble = ({ message, isCurrentUser = false, showTimestamp = 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const formatTime = (timestamp: string) => {
-    // Ensure consistent local time formatting regardless of timestamp source
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { 
-      hour: '2-digit', 
+    // Format time in IST timezone
+    return formatTimeIST(timestamp, {
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: true // Ensure consistent 12-hour format
+      hour12: true
     });
   };
 

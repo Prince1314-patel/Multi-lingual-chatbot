@@ -5,7 +5,8 @@ import uvicorn
 import logging
 import sys
 import traceback
-from datetime import datetime
+
+from app.utils import get_current_time_iso
 
 from app.websocket import websocket_router, init_websocket_services, cleanup_websocket_services
 from app.core import get_chat_logger, ErrorCode
@@ -45,7 +46,7 @@ async def global_exception_handler(request, exc):
         content={
             "error": "Internal server error",
             "message": "An unexpected error occurred",
-            "timestamp": str(datetime.utcnow())
+            "timestamp": get_current_time_iso()
         }
     )
 
@@ -63,7 +64,7 @@ async def http_exception_handler(request, exc):
         content={
             "error": f"HTTP {exc.status_code}",
             "message": exc.detail,
-            "timestamp": str(datetime.utcnow())
+            "timestamp": get_current_time_iso()
         }
     )
 
@@ -141,7 +142,7 @@ async def health_check():
         return {
             "status": "healthy",
             "service": "websocket-chat-backend",
-            "timestamp": str(datetime.utcnow())
+            "timestamp": get_current_time_iso()
         }
     except Exception as e:
         logger.log_error(

@@ -2,7 +2,8 @@ import pytest
 import asyncio
 import json
 from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime, timedelta
+from datetime import timedelta
+from app.utils import get_current_time
 
 from app.services.message_handler import MessageHandler
 from app.services.connection_manager import ConnectionManager
@@ -427,7 +428,7 @@ async def test_expired_typing_indicator_cleanup(connection_manager, room_manager
     
     # Set typing with manual timeout in the past
     conn.set_typing(True)
-    conn.typing_timeout = datetime.utcnow() - timedelta(seconds=5)  # Expired
+            conn.typing_timeout = get_current_time() - timedelta(seconds=5)  # Expired
     
     # Get the room from connection manager and check typing users
     room = connection_manager.get_room(room_id)

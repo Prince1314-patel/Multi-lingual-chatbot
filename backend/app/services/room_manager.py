@@ -1,10 +1,12 @@
 import asyncio
 import logging
 from typing import Dict, List, Optional, Set
-from datetime import datetime, timedelta
+from datetime import timedelta
 import re
 import secrets
 import string
+
+from ..utils import get_current_time
 
 from ..models import Room, validate_room_id, generate_room_id
 
@@ -195,7 +197,7 @@ class RoomManager:
         Returns:
             List of room IDs that should be cleaned up
         """
-        cutoff_time = datetime.utcnow() - self.cleanup_timeout
+        cutoff_time = get_current_time() - self.cleanup_timeout
         cleanup_rooms = []
         
         for room_id, room in self.rooms.items():
@@ -312,6 +314,6 @@ class RoomManager:
             'message_count': room.message_count,
             'is_empty': room.is_empty(),
             'typing_users': list(room.get_typing_users()),
-            'time_since_last_activity': (datetime.utcnow() - room.last_activity).total_seconds(),
+            'time_since_last_activity': (get_current_time() - room.last_activity).total_seconds(),
             'eligible_for_cleanup': room_id in self.get_rooms_for_cleanup()
         }

@@ -12,7 +12,7 @@ Usage:
 
 import os
 import sys
-from datetime import datetime
+from app.utils import get_current_time
 
 # Add the app directory to the Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
@@ -125,7 +125,7 @@ def test_translation_models():
             user_id="test_user",
             room_id="test_room",
             message_id="test_message_1",
-            timestamp=datetime.utcnow()
+            timestamp=get_current_time()
         )
         
         print("✅ Translation request created successfully")
@@ -141,7 +141,7 @@ def test_translation_models():
             target_language="es",
             confidence=0.95,
             processing_time=1.5,
-            timestamp=datetime.utcnow()
+            timestamp=get_current_time()
         )
         
         print("✅ Translation result created successfully")

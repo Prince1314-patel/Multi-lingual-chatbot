@@ -1,6 +1,7 @@
 import pytest
 import asyncio
-from datetime import datetime, timedelta
+from datetime import timedelta
+from app.utils import get_current_time
 from unittest.mock import patch
 
 from app.services.room_manager import RoomManager
@@ -175,8 +176,8 @@ def test_get_rooms_for_cleanup(room_manager):
     room3 = room_manager.create_room("room789")
     
     # Set different last activity times
-    old_time = datetime.utcnow() - timedelta(hours=2)  # 2 hours ago
-    recent_time = datetime.utcnow() - timedelta(minutes=5)  # 5 minutes ago
+            old_time = get_current_time() - timedelta(hours=2)  # 2 hours ago
+        recent_time = get_current_time() - timedelta(minutes=5)  # 5 minutes ago
     
     room1.last_activity = old_time  # Eligible for cleanup
     room2.last_activity = recent_time  # Not eligible
@@ -201,7 +202,7 @@ def test_cleanup_inactive_rooms(room_manager):
     room2 = room_manager.create_room("room456")
     
     # Set old activity time
-    old_time = datetime.utcnow() - timedelta(hours=2)
+            old_time = get_current_time() - timedelta(hours=2)
     room1.last_activity = old_time
     room2.last_activity = old_time
     
@@ -262,7 +263,7 @@ def test_get_room_stats(room_manager):
     room1.connections = {'user1': 'mock_connection'}
     
     # Set one as eligible for cleanup
-    room2.last_activity = datetime.utcnow() - timedelta(hours=2)
+            room2.last_activity = get_current_time() - timedelta(hours=2)
     
     stats = room_manager.get_room_stats()
     assert stats['total_rooms'] == 2

@@ -13,7 +13,7 @@ Usage:
 import asyncio
 import os
 import sys
-from datetime import datetime
+from app.utils import get_current_time
 
 # Add the app directory to the Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
@@ -69,7 +69,7 @@ async def test_translation_service():
             user_id="test_user",
             room_id="test_room",
             message_id="test_message_1",
-            timestamp=datetime.utcnow()
+            timestamp=get_current_time()
         )
         
         result = await translation_service.translate_text(test_request)
@@ -90,7 +90,7 @@ async def test_translation_service():
                 user_id="test_user",
                 room_id="test_room",
                 message_id="test_message_2",
-                timestamp=datetime.utcnow()
+                timestamp=get_current_time()
             ),
             TranslationRequest(
                 text="Good afternoon",
@@ -99,7 +99,7 @@ async def test_translation_service():
                 user_id="test_user",
                 room_id="test_room",
                 message_id="test_message_3",
-                timestamp=datetime.utcnow()
+                timestamp=get_current_time()
             )
         ]
         

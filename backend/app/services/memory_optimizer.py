@@ -8,9 +8,11 @@ import psutil
 import time
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
 import weakref
+
+from ..utils import get_current_time
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +138,7 @@ class MemoryOptimizer:
             memory_percent=memory.percent,
             process_memory_mb=process_memory.rss / (1024 * 1024),
             process_memory_percent=(process_memory.rss / memory.total) * 100,
-            timestamp=datetime.utcnow()
+            timestamp=get_current_time()
         )
     
     async def _monitoring_loop(self, interval_seconds: int):
@@ -227,7 +229,7 @@ class MemoryOptimizer:
         try:
             # Get stale connections (connections with no recent activity)
             cutoff_minutes = 5 if aggressive else 15
-            cutoff_time = datetime.utcnow() - timedelta(minutes=cutoff_minutes)
+            cutoff_time = get_current_time() - timedelta(minutes=cutoff_minutes)
             
             stale_connections = []
             for websocket, connection in connection_manager.connection_lookup.items():

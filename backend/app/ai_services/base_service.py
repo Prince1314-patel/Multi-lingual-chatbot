@@ -13,8 +13,10 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, TypeVar, Generic
-from datetime import datetime, timedelta
+from datetime import timedelta
 from functools import wraps
+
+from ..utils import get_current_time
 
 from .config import AIServiceConfig
 
@@ -250,7 +252,7 @@ class BaseAIService(ABC, Generic[T]):
         """
         self.stats["total_requests"] += 1
         self.stats["total_latency"] += latency
-        self.stats["last_request_time"] = datetime.utcnow()
+        self.stats["last_request_time"] = get_current_time()
         
         if success:
             self.stats["successful_requests"] += 1
