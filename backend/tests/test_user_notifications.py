@@ -19,7 +19,7 @@ class TestUserNotifications:
     def connection_manager(self, room_manager):
         from app.services.rate_limiter import RateLimiter, RateLimitConfig
         rate_limiter = RateLimiter(RateLimitConfig())
-        return ConnectionManager(rate_limiter)
+        return ConnectionManager(room_manager, rate_limiter)
     
     @pytest.fixture
     def mock_websocket(self):
@@ -138,7 +138,7 @@ class TestUserNotifications:
         mock_websocket.send_text.assert_not_called()
         
         # Verify room was cleaned up
-        assert room_id not in connection_manager.rooms
+        assert room_id not in connection_manager.room_manager.rooms
     
     @pytest.mark.asyncio
     async def test_multiple_users_join_notifications(self, connection_manager):

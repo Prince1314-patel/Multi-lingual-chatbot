@@ -74,9 +74,9 @@ def rate_limiter():
 
 
 @pytest.fixture
-def connection_manager(rate_limiter):
+def connection_manager(rate_limiter, room_manager):
     """Create a ConnectionManager for testing"""
-    return ConnectionManager(rate_limiter)
+    return ConnectionManager(room_manager, rate_limiter)
 
 
 @pytest.fixture
@@ -333,9 +333,9 @@ class TestConnectionManagerErrorHandling:
         
         # Manually set up connections to avoid logger issues
         from app.models import Room
-        connection_manager.rooms[room_id] = Room(room_id=room_id)
-        connection_manager.rooms[room_id].add_connection(conn1)
-        connection_manager.rooms[room_id].add_connection(conn2)
+        connection_manager.room_manager.rooms[room_id] = Room(room_id=room_id)
+        connection_manager.room_manager.rooms[room_id].add_connection(conn1)
+        connection_manager.room_manager.rooms[room_id].add_connection(conn2)
         connection_manager.connection_lookup[ws1] = conn1
         connection_manager.connection_lookup[ws2] = conn2
         
@@ -363,8 +363,8 @@ class TestErrorRecovery:
         # Create fresh instances to avoid mocking issues
         from app.services.rate_limiter import RateLimiter, RateLimitConfig
         rate_limiter = RateLimiter(RateLimitConfig())
-        connection_manager = ConnectionManager(rate_limiter)
-        message_handler = MessageHandler(connection_manager, room_manager)
+        connection_manager = ConnectionManager(room_manager, rate_limiter)
+        message_handler = MessageHandler(connection_manager, room_manager, rate_limiter)
         
         # Create mock connection
         ws = MockWebSocket()
@@ -387,7 +387,7 @@ class TestErrorRecovery:
         room = Room(room_id="test-room-456")
         room.add_connection(mock_connection)
         room_manager.rooms["test-room-456"] = room
-        connection_manager.rooms["test-room-456"] = room
+        connection_manager.room_manager.rooms["test-room-456"] = room
         
         valid_message_data = {
             "type": "text",
@@ -404,7 +404,7 @@ class TestErrorRecovery:
         # Create a fresh connection manager for this test
         from app.services.rate_limiter import RateLimiter, RateLimitConfig
         rate_limiter = RateLimiter(RateLimitConfig())
-        connection_manager = ConnectionManager(rate_limiter)
+        connection_manager = ConnectionManager(room_manager, rate_limiter)
         room_id = "test-room"
         
         # Create multiple failing connections
@@ -415,11 +415,11 @@ class TestErrorRecovery:
             connection = ConnectionInfo(websocket=ws, user_id=f"user{i}", room_id=room_id)
             
             # Manually add to connection manager
-            if room_id not in connection_manager.rooms:
+            if room_id not in connection_manager.room_manager.rooms:
                 from app.models import Room
-                connection_manager.rooms[room_id] = Room(room_id=room_id)
+                connection_manager.room_manager.rooms[room_id] = Room(room_id=room_id)
             
-            connection_manager.rooms[room_id].add_connection(connection)
+            connection_manager.room_manager.rooms[room_id].add_connection(connection)
             connection_manager.connection_lookup[ws] = connection
             failing_connections.append(ws)
         
@@ -439,7 +439,7 @@ class TestErrorRecovery:
             assert ws not in connection_manager.connection_lookup
         
         # Room should be empty and cleaned up
-        assert room_id not in connection_manager.rooms
+        assert room_id not in connection_manager.room_manager.rooms
 
 
 @pytest.mark.asyncio

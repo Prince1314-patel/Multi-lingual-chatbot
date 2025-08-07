@@ -59,7 +59,7 @@ async def test_text_message_delivery_confirmation(
 ):
     """Test that text messages generate delivery confirmations"""
     # Setup
-    connection_manager.rooms["test-room"] = mock_room
+    connection_manager.room_manager.rooms["test-room"] = mock_room
     connection_manager.connection_lookup[mock_websocket] = mock_connection
     mock_room.add_connection(mock_connection)
     
@@ -112,7 +112,7 @@ async def test_voice_message_delivery_confirmation(
 ):
     """Test that voice messages generate delivery confirmations"""
     # Setup
-    connection_manager.rooms["test-room"] = mock_room
+    connection_manager.room_manager.rooms["test-room"] = mock_room
     connection_manager.connection_lookup[mock_websocket] = mock_connection
     mock_room.add_connection(mock_connection)
     
@@ -167,7 +167,7 @@ async def test_failed_delivery_confirmation(
 ):
     """Test that failed message delivery generates failed confirmation"""
     # Setup
-    connection_manager.rooms["test-room"] = mock_room
+    connection_manager.room_manager.rooms["test-room"] = mock_room
     connection_manager.connection_lookup[mock_websocket] = mock_connection
     mock_room.add_connection(mock_connection)
     

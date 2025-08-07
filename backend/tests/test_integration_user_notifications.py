@@ -18,7 +18,7 @@ class TestIntegrationUserNotifications:
         from app.services.rate_limiter import RateLimiter, RateLimitConfig
         rate_limiter = RateLimiter(RateLimitConfig())
         room_manager = RoomManager()
-        connection_manager = ConnectionManager(rate_limiter)
+        connection_manager = ConnectionManager(room_manager, rate_limiter)
         message_handler = MessageHandler(connection_manager, room_manager, rate_limiter)
         return connection_manager, room_manager, message_handler
     
@@ -101,7 +101,7 @@ class TestIntegrationUserNotifications:
         
         # Verify room was cleaned up
         assert connection_manager.get_room_connection_count(room_id) == 0
-        assert room_id not in connection_manager.rooms
+        assert room_id not in connection_manager.room_manager.rooms
     
     @pytest.mark.asyncio
     async def test_room_stats_with_user_notifications(self, services, mock_websocket, mock_websocket2):
