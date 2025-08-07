@@ -405,6 +405,11 @@ class TranslationService(BaseAIService[TranslationResult]):
         start_time = get_current_time()
         
         try:
+            logger.info(f"🔄 TranslationService: Starting translation")
+            logger.info(f"📝 Input text: '{request.text}'")
+            logger.info(f"🎯 Target language: {request.target_language}")
+            logger.info(f"🔍 Source language: {request.source_language or 'auto-detect'}")
+            
             self._log_operation("translating", 
                               text_length=len(request.text),
                               target_lang=request.target_language)
@@ -414,15 +419,19 @@ class TranslationService(BaseAIService[TranslationResult]):
             if cache_key in self.cache:
                 cached_result, cache_time = self.cache[cache_key]
                 if get_current_time() - cache_time < timedelta(seconds=self.config.translation_cache_ttl):
-                    logger.debug(f"Translation cache hit for key: {cache_key}")
+                    logger.info(f"✅ Translation cache hit for key: {cache_key}")
+                    logger.info(f"🔄 Cached translation: '{cached_result.translated_text}'")
                     return cached_result
             
             # Detect source language if not provided
             source_language = request.source_language
             if not source_language:
+                logger.info(f"🔍 Auto-detecting source language...")
                 source_language = await self._detect_language(request.text)
+                logger.info(f"🔍 Detected source language: {source_language}")
             
             # Perform translation
+            logger.info(f"🚀 Calling Groq API for translation...")
             translated_text = await self._call_groq_api(request.text, source_language, request.target_language)
             
             # Calculate processing time
@@ -439,6 +448,11 @@ class TranslationService(BaseAIService[TranslationResult]):
                 timestamp=get_current_time()
             )
             
+            logger.info(f"✅ Translation completed successfully!")
+            logger.info(f"📝 Original: '{result.original_text}' ({result.source_language})")
+            logger.info(f"🔄 Translated: '{result.translated_text}' ({result.target_language})")
+            logger.info(f"⏱️  Processing time: {result.processing_time:.2f}s")
+            
             # Cache the result
             self.cache[cache_key] = (result, get_current_time())
             
@@ -453,6 +467,10 @@ class TranslationService(BaseAIService[TranslationResult]):
         except Exception as e:
             processing_time = (get_current_time() - start_time).total_seconds()
             self._update_stats(False, processing_time)
+            
+            logger.error(f"❌ Translation failed after {processing_time:.2f}s")
+            logger.error(f"📝 Failed text: '{request.text}'")
+            logger.error(f"🎯 Target language: {request.target_language}")
             
             error = self._handle_api_error(e, "translation")
             logger.error(f"Translation failed: {error}")

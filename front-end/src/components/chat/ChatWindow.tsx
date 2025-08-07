@@ -82,6 +82,16 @@ export const ChatWindow = ({ roomId, currentUser, otherUser, userPreferences }: 
         setIsOtherUserTyping(Boolean(data.isTyping));
       }
     } else if (data.type === 'message' || data.type === 'text') {
+      // Debug: Log translation data
+      if (data.translated_content || data.translation_status) {
+        console.log('🔍 Translation data received:', {
+          translated_content: data.translated_content,
+          target_language: data.target_language,
+          translation_status: data.translation_status,
+          translation_error: data.translation_error
+        });
+      }
+      
       const message: Message = {
         id: typeof data.id === 'string' ? data.id : '',
         from: (typeof data.from === 'string' ? data.from : typeof data.user_id === 'string' ? data.user_id : ''),
@@ -90,17 +100,41 @@ export const ChatWindow = ({ roomId, currentUser, otherUser, userPreferences }: 
         lang: (typeof data.lang === 'string' ? data.lang : 'en'),
         display_name: typeof data.display_name === 'string' ? data.display_name : undefined,
         timestamp: (typeof data.timestamp === 'string' ? new Date(data.timestamp).toISOString() : new Date().toISOString()),
-        status: 'sent'
+        status: 'sent',
+        // Add translation fields
+        translated_content: typeof data.translated_content === 'string' ? data.translated_content : undefined,
+        target_language: typeof data.target_language === 'string' ? data.target_language : undefined,
+        translation_status: typeof data.translation_status === 'string' ? data.translation_status as "pending" | "processing" | "completed" | "failed" : undefined,
+        translation_error: typeof data.translation_error === 'string' ? data.translation_error : undefined
       };
+
+      // Debug: Log the created message
+      if (message.translated_content || message.translation_status) {
+        console.log('📝 Created message with translation:', {
+          id: message.id,
+          text: message.text,
+          translated_content: message.translated_content,
+          translation_status: message.translation_status
+        });
+      }
 
       // If this is from another user, add it to messages
       if (message.from !== currentUser) {
         setMessages(prev => [...prev, message]);
       } else {
-        // If this is our own message echoed back, update the existing message with server timestamp
+        // If this is our own message echoed back, update the existing message with server timestamp and translation data
         setMessages(prev => prev.map(msg =>
           'id' in msg && 'from' in msg && msg.id === message.id && msg.from === currentUser
-            ? { ...msg, timestamp: message.timestamp, status: 'sent' as const }
+            ? { 
+                ...msg, 
+                timestamp: message.timestamp, 
+                status: 'sent' as const,
+                // Update translation fields if available
+                ...(message.translated_content && { translated_content: message.translated_content }),
+                ...(message.target_language && { target_language: message.target_language }),
+                ...(message.translation_status && { translation_status: message.translation_status }),
+                ...(message.translation_error && { translation_error: message.translation_error })
+              }
             : msg
         ));
       }
