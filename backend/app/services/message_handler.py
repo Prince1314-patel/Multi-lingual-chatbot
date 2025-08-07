@@ -16,9 +16,12 @@ from ..models import (
     UserLeaveMessage,
     MessageDeliveryConfirmation,
     ErrorMessage,
+    TranslationRequest,
+    TranslationResult,
     deserialize_message,
     serialize_message
 )
+from ..ai_services.translation_service import TranslationService
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +30,8 @@ class MessageHandler:
     """Handles processing and routing of different message types"""
     
     def __init__(self, connection_manager: ConnectionManager, room_manager: RoomManager, 
-                 rate_limiter: Optional[RateLimiter] = None):
+                 rate_limiter: Optional[RateLimiter] = None,
+                 translation_service: Optional[TranslationService] = None):
         """
         Initialize MessageHandler
         
@@ -35,10 +39,12 @@ class MessageHandler:
             connection_manager: ConnectionManager instance for handling connections
             room_manager: RoomManager instance for room operations
             rate_limiter: Optional RateLimiter instance for message rate limiting
+            translation_service: Optional TranslationService instance for text translation
         """
         self.connection_manager = connection_manager
         self.room_manager = room_manager
         self.rate_limiter = rate_limiter
+        self.translation_service = translation_service
         self.typing_timeouts: Dict[str, Dict[str, asyncio.Task]] = {}  # room_id -> user_id -> timeout_task
     
     async def handle_message(self, websocket: WebSocket, message_data: dict) -> bool:

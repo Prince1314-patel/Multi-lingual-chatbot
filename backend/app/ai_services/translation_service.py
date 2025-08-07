@@ -1,0 +1,640 @@
+"""
+Translation Service
+
+This module provides text translation capabilities using the Groq API.
+It implements the TranslationService class that handles translation requests,
+language detection, caching, and error handling for the multilingual chat application.
+
+The service supports multiple languages and provides both synchronous and
+asynchronous translation methods with proper error handling and retry logic.
+"""
+
+import asyncio
+import logging
+import hashlib
+import json
+from typing import Dict, List, Optional, Tuple, Any
+from datetime import datetime, timedelta
+from dataclasses import dataclass
+
+try:
+    from groq import AsyncGroq
+    from groq.types.chat import ChatCompletion
+except ImportError:
+    AsyncGroq = None
+    ChatCompletion = None
+
+from .base_service import BaseAIService, AIServiceError, retry_on_error
+from .config import AIServiceConfig
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TranslationRequest:
+    """
+    Translation request data structure.
+    
+    This class represents a translation request with all necessary
+    information for processing and tracking the translation.
+    
+    Attributes:
+        text: The text to translate
+        source_language: Source language code (auto-detected if None)
+        target_language: Target language code
+        user_id: ID of the user requesting translation
+        room_id: ID of the chat room
+        message_id: ID of the original message
+        timestamp: When the request was created
+    """
+    text: str
+    source_language: Optional[str]
+    target_language: str
+    user_id: str
+    room_id: str
+    message_id: str
+    timestamp: datetime
+
+
+@dataclass
+class TranslationResult:
+    """
+    Translation result data structure.
+    
+    This class represents the result of a translation operation,
+    including the translated text, detected language, and metadata.
+    
+    Attributes:
+        original_text: The original text that was translated
+        translated_text: The translated text
+        source_language: Detected source language
+        target_language: Target language
+        confidence: Translation confidence score (0.0 to 1.0)
+        processing_time: Time taken to process the translation
+        timestamp: When the translation was completed
+    """
+    original_text: str
+    translated_text: str
+    source_language: str
+    target_language: str
+    confidence: float
+    processing_time: float
+    timestamp: datetime
+
+
+class TranslationService(BaseAIService[TranslationResult]):
+    """
+    Translation service using Groq API.
+    
+    This service provides text translation capabilities using the Groq
+    Llama-3.3-70B-Versatile model. It supports multiple languages,
+    automatic language detection, caching, and batch processing.
+    
+    The service is designed to be efficient and reliable, with proper
+    error handling, retry logic, and performance monitoring.
+    
+    Attributes:
+        client: Groq API client
+        cache: Translation cache for repeated requests
+        supported_languages: List of supported language codes
+        language_names: Mapping of language codes to display names
+    """
+    
+    def __init__(self, config: AIServiceConfig):
+        """
+        Initialize TranslationService.
+        
+        Args:
+            config: AI service configuration
+        """
+        super().__init__(config, "TranslationService")
+        
+        if not AsyncGroq:
+            raise ImportError("Groq library not installed. Run: pip install groq")
+        
+        self.client: Optional[AsyncGroq] = None
+        self.cache: Dict[str, Tuple[TranslationResult, datetime]] = {}
+        
+        # Supported languages with their display names
+        self.supported_languages = {
+            "en": "English",
+            "es": "Spanish", 
+            "fr": "French",
+            "de": "German",
+            "it": "Italian",
+            "pt": "Portuguese",
+            "ru": "Russian",
+            "ja": "Japanese",
+            "ko": "Korean",
+            "zh": "Chinese",
+            "ar": "Arabic",
+            "hi": "Hindi",
+            "bn": "Bengali",
+            "ur": "Urdu",
+            "tr": "Turkish",
+            "nl": "Dutch",
+            "pl": "Polish",
+            "sv": "Swedish",
+            "da": "Danish",
+            "no": "Norwegian",
+            "fi": "Finnish",
+            "cs": "Czech",
+            "sk": "Slovak",
+            "hu": "Hungarian",
+            "ro": "Romanian",
+            "bg": "Bulgarian",
+            "hr": "Croatian",
+            "sr": "Serbian",
+            "sl": "Slovenian",
+            "et": "Estonian",
+            "lv": "Latvian",
+            "lt": "Lithuanian",
+            "mt": "Maltese",
+            "el": "Greek",
+            "he": "Hebrew",
+            "th": "Thai",
+            "vi": "Vietnamese",
+            "id": "Indonesian",
+            "ms": "Malay",
+            "tl": "Filipino",
+            "sw": "Swahili",
+            "af": "Afrikaans",
+            "is": "Icelandic",
+            "ga": "Irish",
+            "cy": "Welsh",
+            "eu": "Basque",
+            "ca": "Catalan",
+            "gl": "Galician",
+            "mk": "Macedonian",
+            "sq": "Albanian",
+            "bs": "Bosnian",
+            "me": "Montenegrin",
+            "ky": "Kyrgyz",
+            "kk": "Kazakh",
+            "uz": "Uzbek",
+            "tg": "Tajik",
+            "mn": "Mongolian",
+            "ka": "Georgian",
+            "hy": "Armenian",
+            "az": "Azerbaijani",
+            "fa": "Persian",
+            "ps": "Pashto",
+            "ku": "Kurdish",
+            "yi": "Yiddish",
+            "am": "Amharic",
+            "ti": "Tigrinya",
+            "so": "Somali",
+            "ha": "Hausa",
+            "yo": "Yoruba",
+            "ig": "Igbo",
+            "zu": "Zulu",
+            "xh": "Xhosa",
+            "st": "Southern Sotho",
+            "tn": "Tswana",
+            "ss": "Swati",
+            "ve": "Venda",
+            "ts": "Tsonga",
+            "nr": "Southern Ndebele",
+            "nd": "Northern Ndebele"
+        }
+        
+        # Language detection mapping for common language codes
+        self.language_detection_map = {
+            "zh": ["zh-cn", "zh-tw", "zh-hk", "zh-sg"],
+            "pt": ["pt-br", "pt-pt"],
+            "es": ["es-es", "es-mx", "es-ar", "es-co", "es-pe", "es-ve", "es-cl", "es-ec", "es-gt", "es-cu", "es-bo", "es-do", "es-hn", "es-py", "es-sv", "es-ni", "es-pr", "es-cr", "es-pa", "es-gq", "es-gy", "es-uy", "es-pa"],
+            "en": ["en-us", "en-gb", "en-ca", "en-au", "en-nz", "en-ie", "en-za", "en-jm", "en-bz", "en-tt", "en-zw", "en-ph", "en-in", "en-my", "en-sg"]
+        }
+    
+    async def initialize(self) -> None:
+        """
+        Initialize the translation service.
+        
+        This method sets up the Groq API client and validates the configuration.
+        It also performs a health check to ensure the service is ready.
+        
+        Raises:
+            AIServiceError: If initialization fails
+        """
+        try:
+            self._log_operation("initializing")
+            
+            # Initialize Groq client
+            self.client = AsyncGroq(
+                api_key=self.config.groq_api_key,
+                timeout=self.config.groq_timeout,
+                max_retries=self.config.groq_max_retries
+            )
+            
+            if self.config.groq_base_url:
+                self.client.base_url = self.config.groq_base_url
+            
+            # Validate configuration
+            if not self.config.groq_api_key:
+                raise AIServiceError(
+                    self.service_name, "initialization",
+                    "GROQ_API_KEY is required"
+                )
+            
+            # Test connection with a simple request
+            await self._test_connection()
+            
+            self.enabled = True
+            logger.info(f"{self.service_name} initialized successfully")
+            
+        except Exception as e:
+            self.enabled = False
+            error = self._handle_api_error(e, "initialization")
+            logger.error(f"Failed to initialize {self.service_name}: {error}")
+            raise error
+    
+    async def cleanup(self) -> None:
+        """
+        Clean up the translation service.
+        
+        This method closes the Groq client and clears the cache.
+        """
+        self._log_operation("cleaning up")
+        
+        if self.client:
+            await self.client.close()
+            self.client = None
+        
+        self.cache.clear()
+        self.enabled = False
+        
+        logger.info(f"{self.service_name} cleaned up")
+    
+    @retry_on_error(max_retries=3, base_delay=1.0)
+    async def translate_text(self, request: TranslationRequest) -> TranslationResult:
+        """
+        Translate text using Groq API.
+        
+        This method translates the given text from the source language to the
+        target language. It includes caching, language detection, and proper
+        error handling.
+        
+        Args:
+            request: Translation request containing text and language information
+            
+        Returns:
+            TranslationResult containing the translated text and metadata
+            
+        Raises:
+            AIServiceError: If translation fails
+        """
+        if not self.enabled:
+            raise AIServiceError(
+                self.service_name, "translation",
+                "Service is not enabled"
+            )
+        
+        start_time = datetime.utcnow()
+        
+        try:
+            self._log_operation("translating", 
+                              text_length=len(request.text),
+                              target_lang=request.target_language)
+            
+            # Check cache first
+            cache_key = self._generate_cache_key(request)
+            if cache_key in self.cache:
+                cached_result, cache_time = self.cache[cache_key]
+                if datetime.utcnow() - cache_time < timedelta(seconds=self.config.translation_cache_ttl):
+                    logger.debug(f"Translation cache hit for key: {cache_key}")
+                    return cached_result
+            
+            # Detect source language if not provided
+            source_language = request.source_language
+            if not source_language:
+                source_language = await self._detect_language(request.text)
+            
+            # Perform translation
+            translated_text = await self._call_groq_api(request.text, source_language, request.target_language)
+            
+            # Calculate processing time
+            processing_time = (datetime.utcnow() - start_time).total_seconds()
+            
+            # Create result
+            result = TranslationResult(
+                original_text=request.text,
+                translated_text=translated_text,
+                source_language=source_language,
+                target_language=request.target_language,
+                confidence=0.95,  # Groq doesn't provide confidence scores
+                processing_time=processing_time,
+                timestamp=datetime.utcnow()
+            )
+            
+            # Cache the result
+            self.cache[cache_key] = (result, datetime.utcnow())
+            
+            # Update statistics
+            self._update_stats(True, processing_time)
+            
+            logger.info(f"Translation completed in {processing_time:.2f}s: "
+                       f"{source_language} -> {request.target_language}")
+            
+            return result
+            
+        except Exception as e:
+            processing_time = (datetime.utcnow() - start_time).total_seconds()
+            self._update_stats(False, processing_time)
+            
+            error = self._handle_api_error(e, "translation")
+            logger.error(f"Translation failed: {error}")
+            raise error
+    
+    async def translate_batch(self, requests: List[TranslationRequest]) -> List[TranslationResult]:
+        """
+        Translate multiple texts in batch.
+        
+        This method processes multiple translation requests efficiently
+        using concurrent processing while respecting rate limits.
+        
+        Args:
+            requests: List of translation requests
+            
+        Returns:
+            List of translation results in the same order as requests
+            
+        Raises:
+            AIServiceError: If batch translation fails
+        """
+        if not self.enabled:
+            raise AIServiceError(
+                self.service_name, "batch_translation",
+                "Service is not enabled"
+            )
+        
+        if not requests:
+            return []
+        
+        self._log_operation("batch_translating", request_count=len(requests))
+        
+        # Process in batches to respect rate limits
+        batch_size = self.config.translation_batch_size
+        results = []
+        
+        for i in range(0, len(requests), batch_size):
+            batch = requests[i:i + batch_size]
+            
+            # Process batch concurrently
+            tasks = [self.translate_text(req) for req in batch]
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Handle results and exceptions
+            for j, result in enumerate(batch_results):
+                if isinstance(result, Exception):
+                    logger.error(f"Batch translation failed for request {i + j}: {result}")
+                    # Create error result
+                    error_result = TranslationResult(
+                        original_text=batch[j].text,
+                        translated_text=f"[Translation Error: {str(result)}]",
+                        source_language=batch[j].source_language or "unknown",
+                        target_language=batch[j].target_language,
+                        confidence=0.0,
+                        processing_time=0.0,
+                        timestamp=datetime.utcnow()
+                    )
+                    results.append(error_result)
+                else:
+                    results.append(result)
+            
+            # Add delay between batches to respect rate limits
+            if i + batch_size < len(requests):
+                await asyncio.sleep(0.1)  # 100ms delay
+        
+        return results
+    
+    async def detect_language(self, text: str) -> str:
+        """
+        Detect the language of the given text.
+        
+        Args:
+            text: Text to detect language for
+            
+        Returns:
+            Language code (e.g., 'en', 'es', 'fr')
+            
+        Raises:
+            AIServiceError: If language detection fails
+        """
+        return await self._detect_language(text)
+    
+    def get_supported_languages(self) -> Dict[str, str]:
+        """
+        Get list of supported languages.
+        
+        Returns:
+            Dictionary mapping language codes to display names
+        """
+        return self.supported_languages.copy()
+    
+    def is_language_supported(self, language_code: str) -> bool:
+        """
+        Check if a language is supported.
+        
+        Args:
+            language_code: Language code to check
+            
+        Returns:
+            True if language is supported, False otherwise
+        """
+        return language_code.lower() in self.supported_languages
+    
+    async def _test_connection(self) -> None:
+        """
+        Test the connection to Groq API.
+        
+        Raises:
+            AIServiceError: If connection test fails
+        """
+        try:
+            # Simple test request
+            response = await self.client.chat.completions.create(
+                messages=[{"role": "user", "content": "Hello"}],
+                model=self.config.groq_model,
+                max_tokens=10
+            )
+            
+            if not response.choices or not response.choices[0].message.content:
+                raise AIServiceError(
+                    self.service_name, "connection_test",
+                    "Invalid response from Groq API"
+                )
+                
+        except Exception as e:
+            raise self._handle_api_error(e, "connection_test")
+    
+    async def _call_groq_api(self, text: str, source_lang: str, target_lang: str) -> str:
+        """
+        Call Groq API for translation.
+        
+        Args:
+            text: Text to translate
+            source_lang: Source language code
+            target_lang: Target language code
+            
+        Returns:
+            Translated text
+            
+        Raises:
+            AIServiceError: If API call fails
+        """
+        try:
+            # Create translation prompt
+            prompt = self._create_translation_prompt(text, source_lang, target_lang)
+            
+            response = await self.client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a professional translator. Translate the given text accurately while preserving the original meaning, tone, and context. Only return the translated text, nothing else."
+                    },
+                    {
+                        "role": "user", 
+                        "content": prompt
+                    }
+                ],
+                model=self.config.groq_model,
+                max_tokens=len(text) * 2,  # Allow for longer translations
+                temperature=0.1,  # Low temperature for consistent translations
+                top_p=0.9
+            )
+            
+            if not response.choices or not response.choices[0].message.content:
+                raise AIServiceError(
+                    self.service_name, "api_call",
+                    "Empty response from Groq API"
+                )
+            
+            translated_text = response.choices[0].message.content.strip()
+            
+            # Validate translation
+            if not translated_text or translated_text == text:
+                raise AIServiceError(
+                    self.service_name, "api_call",
+                    "Invalid translation result"
+                )
+            
+            return translated_text
+            
+        except Exception as e:
+            raise self._handle_api_error(e, "api_call")
+    
+    async def _detect_language(self, text: str) -> str:
+        """
+        Detect the language of the given text.
+        
+        Args:
+            text: Text to detect language for
+            
+        Returns:
+            Language code
+            
+        Raises:
+            AIServiceError: If language detection fails
+        """
+        try:
+            prompt = f"Detect the language of this text and respond with only the ISO 639-1 language code (e.g., 'en', 'es', 'fr'):\n\n{text}"
+            
+            response = await self.client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a language detection expert. Respond with only the ISO 639-1 language code."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                model=self.config.groq_model,
+                max_tokens=10,
+                temperature=0.0
+            )
+            
+            if not response.choices or not response.choices[0].message.content:
+                raise AIServiceError(
+                    self.service_name, "language_detection",
+                    "Empty response from language detection"
+                )
+            
+            detected_lang = response.choices[0].message.content.strip().lower()
+            
+            # Validate detected language
+            if detected_lang not in self.supported_languages:
+                # Try to map to supported language
+                for lang_code, variants in self.language_detection_map.items():
+                    if detected_lang in variants:
+                        detected_lang = lang_code
+                        break
+                else:
+                    # Default to English if unknown
+                    detected_lang = "en"
+            
+            return detected_lang
+            
+        except Exception as e:
+            raise self._handle_api_error(e, "language_detection")
+    
+    def _create_translation_prompt(self, text: str, source_lang: str, target_lang: str) -> str:
+        """
+        Create translation prompt for Groq API.
+        
+        Args:
+            text: Text to translate
+            source_lang: Source language code
+            target_lang: Target language code
+            
+        Returns:
+            Formatted translation prompt
+        """
+        source_name = self.supported_languages.get(source_lang, source_lang)
+        target_name = self.supported_languages.get(target_lang, target_lang)
+        
+        return f"""Translate the following text from {source_name} to {target_name}:
+
+Text: {text}
+
+Translation:"""
+    
+    def _generate_cache_key(self, request: TranslationRequest) -> str:
+        """
+        Generate cache key for translation request.
+        
+        Args:
+            request: Translation request
+            
+        Returns:
+            Cache key string
+        """
+        # Create a hash of the request parameters
+        cache_data = {
+            "text": request.text,
+            "source_lang": request.source_language,
+            "target_lang": request.target_language
+        }
+        
+        cache_string = json.dumps(cache_data, sort_keys=True)
+        return hashlib.md5(cache_string.encode()).hexdigest()
+    
+    def clear_cache(self) -> None:
+        """Clear the translation cache."""
+        self.cache.clear()
+        logger.info("Translation cache cleared")
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """
+        Get cache statistics.
+        
+        Returns:
+            Dictionary containing cache statistics
+        """
+        return {
+            "cache_size": len(self.cache),
+            "cache_entries": list(self.cache.keys()),
+            "oldest_entry": min((time for _, time in self.cache.values()), default=None),
+            "newest_entry": max((time for _, time in self.cache.values()), default=None)
+        }
