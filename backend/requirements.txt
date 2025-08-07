@@ -10,3 +10,4 @@ psutil
 httpx==0.26.0
 groq
 python-dotenv
+tiktoken

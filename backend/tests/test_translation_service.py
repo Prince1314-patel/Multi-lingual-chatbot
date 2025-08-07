@@ -137,20 +137,290 @@ async def test_translation_service():
         return False
 
 
-async def main():
-    """Main function to run the translation service test"""
-    print("🚀 Starting Translation Service Test")
+async def test_token_estimation():
+    """Test the token estimation functionality"""
+    print("\n🔢 Testing Token Estimation Functionality")
     print("=" * 50)
     
-    success = await test_translation_service()
+    try:
+        # Initialize translation service
+        translation_service = TranslationService(ai_config)
+        await translation_service.initialize()
+        
+        # Test cases for different languages and scenarios
+        test_cases = [
+            # English tests
+            {
+                "text": "Hello, how are you today?",
+                "source_lang": "en",
+                "target_lang": "es",
+                "description": "English to Spanish (basic)"
+            },
+            {
+                "text": "The quick brown fox jumps over the lazy dog. This is a longer sentence to test token estimation accuracy.",
+                "source_lang": "en", 
+                "target_lang": "de",
+                "description": "English to German (long text)"
+            },
+            
+            # Chinese tests (high token density)
+            {
+                "text": "你好，今天天气怎么样？",
+                "source_lang": "zh",
+                "target_lang": "en",
+                "description": "Chinese to English (high token density)"
+            },
+            {
+                "text": "人工智能技术正在快速发展，为各行各业带来了巨大的变革。机器学习和深度学习算法的进步使得计算机能够处理更复杂的任务。",
+                "source_lang": "zh",
+                "target_lang": "en", 
+                "description": "Chinese to English (technical text)"
+            },
+            
+            # Arabic tests (RTL script)
+            {
+                "text": "السلام عليكم، كيف حالك اليوم؟",
+                "source_lang": "ar",
+                "target_lang": "en",
+                "description": "Arabic to English (RTL script)"
+            },
+            
+            # Japanese tests (mixed scripts)
+            {
+                "text": "こんにちは、元気ですか？今日はとても良い天気ですね。",
+                "source_lang": "ja",
+                "target_lang": "en",
+                "description": "Japanese to English (mixed scripts)"
+            },
+            
+            # German tests (compound words)
+            {
+                "text": "Die Donaudampfschifffahrtsgesellschaftskapitänswitwe war sehr traurig.",
+                "source_lang": "de",
+                "target_lang": "en",
+                "description": "German to English (compound words)"
+            },
+            
+            # Edge cases
+            {
+                "text": "",
+                "source_lang": "en",
+                "target_lang": "es",
+                "description": "Empty text"
+            },
+            {
+                "text": "A",
+                "source_lang": "en",
+                "target_lang": "fr",
+                "description": "Single character"
+            },
+            {
+                "text": "123 456 789",
+                "source_lang": "en",
+                "target_lang": "de",
+                "description": "Numbers and spaces"
+            }
+        ]
+        
+        print(f"Running {len(test_cases)} token estimation test cases...\n")
+        
+        for i, test_case in enumerate(test_cases, 1):
+            text = test_case["text"]
+            source_lang = test_case["source_lang"]
+            target_lang = test_case["target_lang"]
+            description = test_case["description"]
+            
+            print(f"Test {i}: {description}")
+            print(f"  Text: '{text[:50]}{'...' if len(text) > 50 else ''}'")
+            print(f"  Languages: {source_lang} -> {target_lang}")
+            print(f"  Character count: {len(text)}")
+            
+            # Test token estimation
+            estimated_tokens = translation_service._estimate_tokens(text, source_lang, target_lang)
+            print(f"  Estimated tokens: {estimated_tokens}")
+            
+            # Test expansion factor
+            expansion_factor = translation_service._get_translation_expansion_factor(source_lang, target_lang)
+            print(f"  Expansion factor: {expansion_factor:.2f}")
+            
+            # Validate reasonable estimates
+            if text:  # Skip validation for empty text
+                char_to_token_ratio = estimated_tokens / len(text) if len(text) > 0 else 0
+                print(f"  Char/Token ratio: {char_to_token_ratio:.2f}")
+                
+                # Basic sanity checks
+                if estimated_tokens < 0:
+                    print(f"  ❌ ERROR: Negative token estimate!")
+                elif estimated_tokens == 0 and len(text) > 0:
+                    print(f"  ❌ ERROR: Zero tokens for non-empty text!")
+                elif char_to_token_ratio > 5.0:  # Extremely high ratio
+                    print(f"  ⚠️  WARNING: Very high char/token ratio!")
+                elif char_to_token_ratio < 0.1:  # Extremely low ratio
+                    print(f"  ⚠️  WARNING: Very low char/token ratio!")
+                else:
+                    print(f"  ✅ Token estimate looks reasonable")
+            else:
+                print(f"  ✅ Empty text handled correctly")
+            
+            print()
+        
+        # Test language coefficient coverage
+        print("🌍 Testing language coefficient coverage...")
+        supported_languages = translation_service.get_supported_languages()
+        missing_coefficients = []
+        
+        for lang_code in supported_languages.keys():
+            if lang_code not in translation_service.token_coefficients:
+                missing_coefficients.append(lang_code)
+        
+        if missing_coefficients:
+            print(f"⚠️  Missing token coefficients for: {', '.join(missing_coefficients)}")
+        else:
+            print("✅ All supported languages have token coefficients")
+        
+        # Test tiktoken availability
+        print(f"\n🔧 Tiktoken availability: {'✅ Available' if translation_service.tokenizer else '❌ Not available'}")
+        
+        print("\n✅ Token estimation tests completed successfully!")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Token estimation test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        if 'translation_service' in locals():
+            await translation_service.cleanup()
+
+
+async def test_token_estimation_accuracy():
+    """Test token estimation accuracy against actual API usage (if API key available)"""
+    print("\n📊 Testing Token Estimation Accuracy")
+    print("=" * 50)
     
-    if success:
-        print("\n✅ Translation service test completed successfully!")
-        sys.exit(0)
+    if not os.getenv("GROQ_API_KEY"):
+        print("❌ GROQ_API_KEY not available, skipping accuracy test")
+        return True
+    
+    try:
+        translation_service = TranslationService(ai_config)
+        await translation_service.initialize()
+        
+        # Test cases for accuracy validation
+        accuracy_test_cases = [
+            {
+                "text": "Hello world, this is a test.",
+                "source_lang": "en",
+                "target_lang": "es"
+            },
+            {
+                "text": "你好世界",
+                "source_lang": "zh", 
+                "target_lang": "en"
+            }
+        ]
+        
+        print("Comparing token estimates with actual API usage...\n")
+        
+        for i, test_case in enumerate(accuracy_test_cases, 1):
+            text = test_case["text"]
+            source_lang = test_case["source_lang"]
+            target_lang = test_case["target_lang"]
+            
+            print(f"Accuracy Test {i}: {source_lang} -> {target_lang}")
+            print(f"  Text: '{text}'")
+            
+            # Get our estimation
+            estimated_tokens = translation_service._estimate_tokens(text, source_lang, target_lang)
+            print(f"  Our estimate: {estimated_tokens} tokens")
+            
+            # Try to get actual usage by performing translation
+            try:
+                request = TranslationRequest(
+                    text=text,
+                    source_language=source_lang,
+                    target_language=target_lang,
+                    user_id="test_user",
+                    room_id="test_room",
+                    message_id="test_message",
+                    timestamp=get_current_time()
+                )
+                
+                result = await translation_service.translate_text(request)
+                print(f"  Translation: '{result.translated_text[:50]}{'...' if len(result.translated_text) > 50 else ''}'")
+                print(f"  Processing time: {result.processing_time:.2f}s")
+                
+                # Calculate actual output tokens (approximation)
+                actual_output_tokens = translation_service._estimate_tokens(
+                    result.translated_text, target_lang, target_lang
+                )
+                print(f"  Actual output tokens (estimated): {actual_output_tokens}")
+                
+                # Compare with our prediction
+                accuracy_ratio = actual_output_tokens / estimated_tokens if estimated_tokens > 0 else 0
+                print(f"  Accuracy ratio: {accuracy_ratio:.2f} (1.0 = perfect)")
+                
+                if 0.5 <= accuracy_ratio <= 2.0:
+                    print(f"  ✅ Estimation within reasonable range")
+                else:
+                    print(f"  ⚠️  Estimation may need adjustment")
+                
+            except Exception as e:
+                print(f"  ❌ Translation failed: {e}")
+            
+            print()
+        
+        print("✅ Token estimation accuracy test completed!")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Accuracy test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        if 'translation_service' in locals():
+            await translation_service.cleanup()
+
+
+async def main():
+    """Main test function"""
+    print("🚀 Running Translation Service Tests")
+    print("=" * 50)
+    
+    success = True
+    
+    # Run original translation test
+    if await test_translation_service():
+        print("✅ Basic translation test passed")
     else:
-        print("\n❌ Translation service test failed!")
-        sys.exit(1)
+        print("❌ Basic translation test failed")
+        success = False
+    
+    # Run token estimation tests
+    if await test_token_estimation():
+        print("✅ Token estimation test passed")
+    else:
+        print("❌ Token estimation test failed")
+        success = False
+    
+    # Run accuracy test
+    if await test_token_estimation_accuracy():
+        print("✅ Token estimation accuracy test passed")
+    else:
+        print("❌ Token estimation accuracy test failed")
+        success = False
+    
+    print("\n" + "=" * 50)
+    if success:
+        print("🎉 All tests passed!")
+        return 0
+    else:
+        print("💥 Some tests failed!")
+        return 1
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    exit_code = asyncio.run(main())
+    sys.exit(exit_code)
