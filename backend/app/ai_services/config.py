@@ -14,6 +14,10 @@ from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import Field, validator
 
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 
 class AIServiceConfig(BaseSettings):
     """
