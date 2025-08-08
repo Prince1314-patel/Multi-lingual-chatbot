@@ -10,7 +10,7 @@ A Progressive Web Application (PWA) that enables real-time multilingual communic
 - **AI-powered Translation**: ✅ Groq Llama-3.3-70B-Versatile for multilingual text translation
 - **Personalized Translation**: Each user receives messages in their preferred language
 - **Clean Translation Display**: Shows only translated content without UI clutter
-- **Voice Processing**: OpenAI Whisper (ASR), Coqui TTS, and Chatterbox TTS for voice cloning
+- **Voice Processing**: OpenAI Whisper (ASR) and Chatterbox TTS for text-to-speech and voice cloning
 - **IST Timezone Support**: ✅ Complete timezone migration with IST timezone-aware datetime handling
 - **Progressive Web App**: Mobile-responsive, installable, offline-capable
 
@@ -25,7 +25,7 @@ A Progressive Web Application (PWA) that enables real-time multilingual communic
 ### Backend
 - **FastAPI** (Python) with async/await
 - **WebSocket** rooms for real-time messaging
-- **AI Services**: ✅ Groq API integration, OpenAI Whisper (planned), Coqui TTS (planned)
+- **AI Services**: ✅ Groq API integration, OpenAI Whisper (planned), Chatterbox TTS (planned)
 - **Database**: MongoDB (planned), AWS S3 (planned), Redis (planned)
 - **Timezone**: ✅ IST timezone-aware datetime handling throughout
 
@@ -168,7 +168,6 @@ AWS_S3_BUCKET=your_s3_bucket_name
 AWS_REGION=us-east-1
 
 # TTS Configuration
-COQUI_TTS_URL=http://localhost:5002
 CHATTERBOX_TTS_URL=http://localhost:5003
 
 # Application Settings
@@ -231,8 +230,7 @@ python -m pytest --cov                  # Run with coverage report
 
 ### 📅 Phase 3: Voice Transcription, Translation & Synthesis
 - [ ] OpenAI Whisper integration (ASR)
-- [ ] Coqui TTS integration
-- [ ] Chatterbox TTS for voice cloning
+- [ ] Chatterbox TTS integration for text-to-speech and voice cloning
 - [ ] Voice message processing pipeline
 
 ### 📅 Phase 4: Persistence, Scalability & History

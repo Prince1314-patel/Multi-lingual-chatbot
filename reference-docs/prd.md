@@ -47,8 +47,7 @@ Develop an **AI-Powered Multilingual Voice & Text Communication Agent** as a Pro
 
 - Automatic Speech Recognition (ASR) for voice-to-text (OpenAI Whisper or equivalent).
 - Text translation via Groq’s Llama-3.3-70B-Versatile multilingual model.
-- Text-to-Speech (TTS) synthesis using **Coqui TTS** for natural voice output.
-- Voice cloning capabilities using **Chatterbox TTS** for personalized, expressive speech synthesis.
+- Text-to-Speech (TTS) synthesis and voice cloning using **Chatterbox TTS** for natural voice output and personalized, expressive speech synthesis.
 
 ### Frontend
 
@@ -59,7 +58,7 @@ Develop an **AI-Powered Multilingual Voice & Text Communication Agent** as a Pro
 ### Backend
 
 - FastAPI-based backend managing WebSocket connections per room.
-- Orchestration of AI API calls for ASR, Groq translation, and Coqui/Chatterbox TTS.
+- Orchestration of AI API calls for ASR, Groq translation, and Chatterbox TTS.
 - In-memory or persistent storage for messages and audio (optional future enhancement).
 
 ---
@@ -81,7 +80,7 @@ Develop an **AI-Powered Multilingual Voice & Text Communication Agent** as a Pro
 | WebSocket & Networking | FastAPI WebSocketRoute, MediaRecorder API |
 | Speech-to-Text (ASR) | OpenAI Whisper API / equivalent |
 | Translation | Groq Llama-3.3-70B-Versatile |
-| Text-to-Speech (TTS) | Coqui TTS, Chatterbox TTS |
+| Text-to-Speech (TTS) | Chatterbox TTS |
 | Backend | FastAPI (Python) |
 | Storage (Optional) | MongoDB, AWS S3 |
 
@@ -97,4 +96,4 @@ Develop an **AI-Powered Multilingual Voice & Text Communication Agent** as a Pro
 
 ---
 
-This architecture combines Groq’s powerful multilingual LLM for translation, Coqui TTS for natural speech synthesis, and Chatterbox TTS for advanced voice cloning to deliver a rich, real-time multilingual chat experience without the friction of user authentication.
+This architecture combines Groq's powerful multilingual LLM for translation and Chatterbox TTS for natural speech synthesis and voice cloning to deliver a rich, real-time multilingual chat experience without the friction of user authentication.

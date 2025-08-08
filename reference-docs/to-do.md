@@ -37,13 +37,13 @@ This to-do list is organized by phases to guide the step-by-step development of 
 - [x] Add timezone utilities and migrate from deprecated `datetime.utcnow()` to IST timezone.
 
 ### 🔄 Frontend Tasks - IN PROGRESS
-- [ ] Add language selector UI for user preferred language.
-- [ ] Enhance frontend to display dual-language messages side-by-side.
-- [ ] Validate UI rendering and translation correctness manually.
+- [x] Add language selector UI for user preferred language.
+- [x] Enhance frontend to display dual-language messages side-by-side.
+- [x] Validate UI rendering and translation correctness manually.
 
 **Current Status**: 🔄 **BACKEND COMPLETED, FRONTEND IN PROGRESS**
 - Backend: ✅ Complete translation service with Groq API integration, 161 tests passing
-- Frontend: 🔄 Ready for dual-language message display implementation
+- Frontend: ✅ Completed the frontend integration
 - Timezone: ✅ Migrated to IST timezone throughout application
 
 ---
@@ -52,8 +52,7 @@ This to-do list is organized by phases to guide the step-by-step development of 
 
 - [ ] Integrate OpenAI Whisper or equivalent for ASR on backend.
 - [ ] Chain whisper transcription to Groq translation API call.
-- [ ] Integrate Coqui TTS for translated text synthesis to audio.
-- [ ] Optionally add Chatterbox TTS integration for voice cloning capabilities.
+- [ ] Integrate Chatterbox TTS for translated text synthesis to audio and voice cloning capabilities.
 - [ ] Expand WebSocket handling for binary audio frames and JSON messages.
 - [ ] Add UI indicators showing transcription, translation, and synthesis progress.
 - [ ] Implement playback controls for both original and synthesized voice messages.
@@ -134,7 +133,6 @@ GROQ_API_KEY=your_groq_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 
 # TTS Configuration (for Phase 3)
-COQUI_TTS_URL=http://localhost:5002
 CHATTERBOX_TTS_URL=http://localhost:5003
 ```
 
@@ -144,7 +142,7 @@ CHATTERBOX_TTS_URL=http://localhost:5003
 pip install groq
 
 # Backend (Phase 3)
-pip install openai-whisper coqui-tts
+pip install openai-whisper
 
 # Backend (Phase 4)
 pip install motor redis boto3

@@ -65,8 +65,7 @@
 - [ ] Error handling for transcription
 
 #### 3.3 Text-to-Speech 📅
-- [ ] Coqui TTS integration
-- [ ] Chatterbox TTS integration
+- [ ] Chatterbox TTS integration for text-to-speech and voice cloning
 - [ ] Audio synthesis service
 - [ ] Playback controls
 
