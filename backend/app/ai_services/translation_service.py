@@ -406,7 +406,9 @@ class TranslationService(BaseAIService[TranslationResult]):
         
         try:
             logger.info(f"🔄 TranslationService: Starting translation")
-            logger.info(f"📝 Input text: '{request.text}'")
+            # Log truncated version to avoid leaking sensitive data
+            text_preview = request.text[:50] + "..." if len(request.text) > 50 else request.text
+            logger.info(f"📝 Input text (preview): '{text_preview}' (length: {len(request.text)})")
             logger.info(f"🎯 Target language: {request.target_language}")
             logger.info(f"🔍 Source language: {request.source_language or 'auto-detect'}")
             
@@ -469,7 +471,9 @@ class TranslationService(BaseAIService[TranslationResult]):
             self._update_stats(False, processing_time)
             
             logger.error(f"❌ Translation failed after {processing_time:.2f}s")
-            logger.error(f"📝 Failed text: '{request.text}'")
+            # Log truncated version to avoid leaking sensitive data
+            text_preview = request.text[:50] + "..." if len(request.text) > 50 else request.text
+            logger.error(f"📝 Failed text (preview): '{text_preview}' (length: {len(request.text)})")
             logger.error(f"🎯 Target language: {request.target_language}")
             
             error = self._handle_api_error(e, "translation")

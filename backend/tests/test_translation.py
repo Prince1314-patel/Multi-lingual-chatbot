@@ -40,43 +40,52 @@ async def test_translation():
             print(f"📤 Sending test message: {test_message['content']}")
             await websocket.send(json.dumps(test_message))
             
-            # Wait for multiple responses (confirmation and actual message)
-            print("⏳ Waiting for responses...")
+            # Wait for responses with deadline-driven approach
+            print("⏳ Waiting for responses with 15-second deadline...")
             responses = []
-            for i in range(3):  # Wait for up to 3 responses
+            translation_found = False
+            deadline = asyncio.get_event_loop().time() + 15.0  # 15-second overall deadline
+            
+            while asyncio.get_event_loop().time() < deadline and not translation_found:
                 try:
-                    response = await asyncio.wait_for(websocket.recv(), timeout=5.0)
+                    # Calculate remaining time for this iteration
+                    remaining_time = deadline - asyncio.get_event_loop().time()
+                    if remaining_time <= 0:
+                        break
+                    
+                    response = await asyncio.wait_for(websocket.recv(), timeout=remaining_time)
                     responses.append(response)
-                    print(f"📨 Received response {i+1}: {response}")
+                    print(f"📨 Received response: {response}")
+                    
+                    # Check for translation in this response
+                    try:
+                        response_data = json.loads(response)
+                        
+                        if response_data.get("type") == "text":
+                            print("✅ Message received successfully")
+                            
+                            # Check for translation
+                            if "translated_content" in response_data:
+                                print(f"✅ Translation found: {response_data['translated_content']}")
+                                print(f"📊 Translation status: {response_data.get('translation_status', 'unknown')}")
+                                translation_found = True
+                                break  # Exit loop once translation is found
+                            else:
+                                print("⚠️  No translation found in this response, continuing...")
+                                
+                        elif response_data.get("type") == "message_confirmation":
+                            status = response_data.get("status", "unknown")
+                            print(f"📊 Message confirmation status: {status}")
+                            
+                    except json.JSONDecodeError:
+                        print(f"⚠️  Non-JSON response: {response}")
+                        
                 except asyncio.TimeoutError:
+                    print("⏰ Timeout waiting for next response")
                     break
             
-            # Check for translation in responses
-            translation_found = False
-            for response in responses:
-                try:
-                    response_data = json.loads(response)
-                    
-                    if response_data.get("type") == "text":
-                        print("✅ Message received successfully")
-                        
-                        # Check for translation
-                        if "translated_content" in response_data:
-                            print(f"✅ Translation found: {response_data['translated_content']}")
-                            print(f"📊 Translation status: {response_data.get('translation_status', 'unknown')}")
-                            translation_found = True
-                        else:
-                            print("⚠️  No translation found in response")
-                            
-                    elif response_data.get("type") == "message_confirmation":
-                        status = response_data.get("status", "unknown")
-                        print(f"📊 Message confirmation status: {status}")
-                        
-                except json.JSONDecodeError:
-                    print(f"⚠️  Non-JSON response: {response}")
-            
-            if not translation_found:
-                print("❌ No translation found in any response")
+            # Assert that translation was found
+            assert translation_found, f"❌ No translation found within deadline. Received {len(responses)} responses but none contained translation."
                 
     except Exception as e:
         print(f"❌ Error during test: {e}")
