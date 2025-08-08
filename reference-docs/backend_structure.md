@@ -1,150 +1,177 @@
-# Backend Structure Guidelines
+# Backend Structure Documentation
 
-This document specifies the architecture, core modules, and best practices for building the backend of the AI-Powered Multilingual Voice & Text Communication Agent, focusing on maintainability, scalability, and real-time performance.
+## Overview
+The backend is built with FastAPI and provides real-time multilingual chat functionality with WebSocket support, AI-powered translation, and comprehensive error handling.
 
----
+## Core Components
 
-## Technology Choices
+### 1. WebSocket Management (`app/websocket.py`)
+- **Purpose**: Main WebSocket endpoint and service initialization
+- **Key Features**:
+  - WebSocket connection handling with CORS support
+  - Service initialization (translation, rate limiting, connection management)
+  - Graceful shutdown handling
+- **Recent Updates**:
+  - Made `init_websocket_services()` async to properly initialize translation service
+  - Added rate limiter startup/shutdown handling
 
-- **Framework:** FastAPI (Python, async)
-- **Real-time Communication:** WebSockets (FastAPI native support)
-- **AI/ML Integration:** ✅ Groq API (translation), OpenAI Whisper (ASR - planned), Chatterbox TTS (speech synthesis - planned)
-- **Persistence:** MongoDB (messages, metadata - planned), AWS S3 (audio blobs - planned), Redis (scaling pub/sub - planned)
-- **Other:** Uvicorn (ASGI server), Pydantic (validation), pytest (testing), IST timezone handling
+### 2. Message Handler (`app/services/message_handler.py`)
+- **Purpose**: Central message processing and routing logic
+- **Key Features**:
+  - Text message handling with translation orchestration
+  - Voice message processing
+  - Typing indicator management
+  - Personalized message delivery
+- **Recent Updates**:
+  - **Translation Orchestration**: Messages requiring translation are processed asynchronously for each user
+  - **Personalized Delivery**: Each user receives messages in their preferred language
+  - **Typing Indicator Fixes**: Enhanced typing timeout handling to prevent interference with translation
+  - **Translation Progress Tracking**: Added `translation_in_progress` set to prevent typing messages during translation
+  - **Extended Timeout**: Increased typing timeout from 5 to 30 seconds
+  - **Status Management**: Explicitly set message status to "delivered" for translated messages
 
----
+### 3. Translation Service (`app/ai_services/translation_service.py`)
+- **Purpose**: AI-powered text translation using Groq API
+- **Key Features**:
+  - Language detection and translation
+  - Caching for performance
+  - Comprehensive error handling
+  - Detailed logging for debugging
+- **Recent Updates**:
+  - Enhanced logging with detailed translation flow tracking
+  - Improved error handling and retry logic
+  - Better performance monitoring with processing time tracking
 
-## Project Directory Structure
+### 4. Connection Manager (`app/services/connection_manager.py`)
+- **Purpose**: WebSocket connection lifecycle management
+- **Key Features**:
+  - Connection tracking and cleanup
+  - Message broadcasting
+  - Rate limiting integration
+- **Recent Updates**:
+  - Improved message delivery confirmation
+  - Enhanced error handling for disconnected users
 
+### 5. Room Manager (`app/services/room_manager.py`)
+- **Purpose**: Chat room management and user organization
+- **Key Features**:
+  - Room creation and management
+  - User assignment to rooms
+  - Connection tracking within rooms
+- **Recent Updates**:
+  - Enhanced room validation and cleanup
+
+## Message Flow Architecture
+
+### Translation Flow (Updated)
+1. **Message Reception**: User sends text message
+2. **Translation Detection**: System checks if translation is needed based on user language preferences
+3. **Personalized Processing**: If translation needed:
+   - Mark room as having translation in progress
+   - Process translation for each user individually
+   - Send translated message to users with different language preferences
+   - Send original message to users with same language preference
+4. **Status Management**: All messages explicitly set to "delivered" status
+5. **Cleanup**: Remove room from translation progress tracking
+
+### Typing Indicator Flow (Updated)
+1. **Typing Start**: User begins typing → Set typing timeout (30 seconds)
+2. **Message Sent**: User sends message → Cancel typing timeout immediately
+3. **Translation Protection**: If translation in progress → Skip typing timeout messages
+4. **Normal Timeout**: If no translation → Send typing stopped after 30 seconds
+
+## Data Models
+
+### Message Models (`app/models/message.py`)
+- **TextMessage**: Enhanced with translation fields and status tracking
+- **VoiceMessage**: Voice message handling with transcription
+- **TypingMessage**: Typing indicator management
+- **Recent Updates**:
+  - Added `status` field with delivery tracking
+  - Enhanced translation status fields
+  - Improved validation patterns
+
+### Connection Models (`app/models/connection.py`)
+- **Connection**: WebSocket connection with user preferences
+- **Room**: Chat room with user management
+- **Recent Updates**:
+  - Enhanced room ID validation (allows underscores and hyphens)
+  - Improved user preference handling
+
+## Error Handling
+
+### Comprehensive Error Management
+- **Connection Errors**: Graceful handling of WebSocket disconnections
+- **Translation Errors**: Fallback to original message on translation failure
+- **Rate Limiting**: Token bucket algorithm for message and connection limits
+- **Logging**: Structured logging throughout all components
+
+## Performance Optimizations
+
+### Translation Optimizations
+- **Caching**: Translation results cached to reduce API calls
+- **Async Processing**: Non-blocking translation processing
+- **Progress Tracking**: Prevents duplicate work and typing interference
+
+### Connection Optimizations
+- **Connection Pooling**: Efficient WebSocket connection management
+- **Memory Management**: Automatic cleanup of disconnected users
+- **Rate Limiting**: Prevents abuse and ensures fair usage
+
+## Configuration
+
+### Environment Variables
+- `GROQ_API_KEY`: Required for translation service
+- `LOG_LEVEL`: Logging verbosity control
+- `RATE_LIMIT_MESSAGES`: Message rate limiting configuration
+- `RATE_LIMIT_CONNECTIONS`: Connection rate limiting configuration
+
+### Service Dependencies
+- **Translation Service**: Requires valid Groq API key
+- **Rate Limiter**: Automatic startup/shutdown handling
+- **Connection Manager**: Integrated with room management
+
+## Recent Bug Fixes
+
+### Translation Issues (Resolved)
+- **Duplicate Messages**: Fixed by removing redundant broadcast of original messages
+- **Status Indicators**: Removed "Translating..." and "Translation failed" UI elements
+- **Language Detection**: Fixed logic to compare sender's preferred language with receiver's preferred language
+
+### Typing Indicator Issues (Resolved)
+- **Interference with Translation**: Added translation progress tracking to prevent typing messages during translation
+- **Premature Timeouts**: Increased timeout from 5 to 30 seconds
+- **Race Conditions**: Enhanced cancellation logic when messages are sent
+
+### Status Display Issues (Resolved)
+- **Message Status**: Explicitly set status to "delivered" for all translated messages
+- **Frontend Integration**: Updated frontend to properly read status from backend messages
+- **Icon Display**: Messages now show correct delivery status icons
+
+## Testing
+
+### Test Coverage
+- **Unit Tests**: Individual component testing
+- **Integration Tests**: End-to-end message flow testing
+- **Translation Tests**: Multi-language communication verification
+- **Error Handling Tests**: Failure scenario validation
+
+### Test Files Location
+All test files are located in `backend/tests/` directory as per project guidelines.
+
+## Deployment
+
+### Development Setup
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+PYTHONPATH=. python main.py
 ```
-backend/
-│
-├── app/
-│   ├── main.py                # FastAPI application entrypoint
-│   ├── websocket.py           # WebSocket endpoints, room management
-│   ├── api/                   # RESTful endpoints (history, admin, health)
-│   ├── ai_services/           # ✅ Groq, Whisper, Coqui, Chatterbox integrations
-│   │   ├── __init__.py        # AI services module initialization
-│   │   ├── config.py          # AI service configuration
-│   │   ├── base_service.py    # Base AI service class
-│   │   └── translation_service.py # ✅ Groq translation service
-│   ├── models/                # Pydantic and MongoDB schemas
-│   ├── services/              # WebSocket and message handling services
-│   │   ├── connection_manager.py # Connection management
-│   │   ├── message_handler.py # Message processing with translation
-│   │   ├── room_manager.py    # Room lifecycle management
-│   │   ├── rate_limiter.py    # Rate limiting
-│   │   └── memory_optimizer.py # Memory optimization
-│   ├── utils/                 # ✅ Utility/helper functions including timezone
-│   │   ├── __init__.py        # Utils module initialization
-│   │   └── timezone.py        # ✅ IST timezone utilities
-│   └── config.py              # Configuration variables and secrets loading
-│
-├── requirements.txt
-├── Dockerfile
-└── tests/                     # ✅ Comprehensive test suite (161 tests)
-```
 
----
-
-## Core Modules
-
-### 1. **WebSocket Room Handling** ✅
-- Endpoint: `/ws/chat/{room_id}`  
-- Manages all incoming connections; maintains active connections per room in memory or via Redis for scalability.
-- Handles JSON (text, control, status) and binary (audio) messages.
-- Broadcasts messages only to clients in the same room.
-- Each connection can store user context (language preference, display name).
-
-### 2. **Message Processing** ✅
-- Text messages:  
-  - ✅ On receive: broadcast original, then trigger translation pipeline (Groq API), send translated result as a follow-up event.
-- Audio messages:  
-  - On receive: send to ASR (Whisper - planned), get transcript, pipeline to translation (Groq), TTS synthesis (Coqui or Chatterbox - planned), then send back TTS audio (binary frame).
-- All steps are asynchronous with progress events for the client ("Transcribing", "Translating", etc).
-
-### 3. **AI Service Integrations (`ai_services/`)** ✅
-- ✅ **Translation:** Wrapper for Groq text generation API, expose `translate(text, src_lang, tgt_lang)`.
-- **ASR:** Whisper integration for audio to text (planned).
-- **TTS:** Wrappers for Coqui and Chatterbox APIs/servers, selective use based on context (planned).
-- ✅ Caching/failover logic for service downtime.
-
-### 4. **Persistence Layer (`storage/`)** 📅
-- **MongoDB**: Store chat messages, room metadata (room_id, participants, timestamps) (planned).
-- **AWS S3**: Save audio blobs, reference URLs in message records (planned).
-- **Redis (optional)**: Manage distributed WebSocket room state for high availability (planned).
-
-### 5. **RESTful APIs (`api/`)** ✅
-- `/history/{room_id}`: Fetch chat history for a given room (with pagination).
-- `/health`: Liveness/readiness probes.
-- `/admin/*`: Metrics and statistics endpoints (secured if enabled).
-
-### 6. **Configuration and Utilities** ✅
-- `config.py`: Centralized config (env vars, keys, service URLs).
-- ✅ Logging and error-handling utilities for observability.
-- ✅ IST timezone utilities for consistent datetime handling.
-
----
-
-## Coding Best Practices
-
-- ✅ All core logic is `async` for high concurrency.
-- ✅ Use Pydantic for all request/response and internal message models.
-- ✅ Graceful error handling and user-friendly error events down the WebSocket.
-- ✅ Modular, testable functions with unit/integration test coverage (161 tests passing).
-- ✅ Sensitive secrets loaded from environment variables; never hard-code tokens.
-- ✅ Timezone-aware datetime handling throughout the application.
-
----
-
-## Scalability and Extensibility
-
-- ✅ In-memory structures support small scale; plug Redis for distributed systems.
-- ✅ Each component (message processor, AI integrations, storage) is pluggable/replaceable.
-- ✅ WebSocket broadcast logic allows group chat via room_id (with minimal changes).
-
----
-
-## Security & Compliance
-
-- ✅ Generate unguessable UUIDs for room_id.
-- ✅ Sanitize and validate all incoming WebSocket and REST requests.
-- ✅ Secure all admin and sensitive endpoints.
-
----
-
-## ✅ Recent Implementations
-
-### AI Services Module
-- Complete translation service with Groq API integration
-- Retry logic and error handling for API failures
-- Comprehensive test coverage for translation functionality
-- Base service class for extensible AI service architecture
-
-### Timezone Migration
-- Replaced deprecated `datetime.utcnow()` with IST timezone-aware datetime objects
-- Created comprehensive timezone utilities for both backend and frontend
-- Updated 15+ files across backend and frontend
-- All 161 tests passing with new timezone implementation
-
-### Message Processing Enhancement
-- Enhanced message models with translation fields
-- Asynchronous translation processing
-- Translation status tracking and error handling
-- Real-time translation progress updates
-
----
-
-## 🚀 Next Steps
-
-### Phase 2.3: Frontend Translation UI
-- Language selector component
-- Dual-language message display
-- Translation status indicators
-- Translation error handling in UI
-
-### Phase 3: Voice Processing Pipeline
-- OpenAI Whisper integration for ASR
-- Coqui TTS integration for speech synthesis
-- Voice message processing pipeline
-- Real-time transcription and translation indicators
+### Production Considerations
+- **Environment Variables**: Ensure all required API keys are set
+- **Rate Limiting**: Configure appropriate limits for production load
+- **Logging**: Set appropriate log levels for production monitoring
+- **Error Monitoring**: Implement proper error tracking and alerting

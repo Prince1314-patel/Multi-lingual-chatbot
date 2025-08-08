@@ -1,190 +1,236 @@
 # Frontend Guidelines
 
-This document outlines best practices, architectural decisions, and coding standards for developing the frontend of the AI-Powered Multilingual Voice & Text Communication Agent.
+## Overview
+The frontend is built with React, TypeScript, and Tailwind CSS, providing a modern, responsive chat interface with real-time multilingual communication capabilities.
 
----
+## Core Components
 
-## Technology Stack
+### 1. Chat Window (`src/components/chat/ChatWindow.tsx`)
+- **Purpose**: Main chat interface and WebSocket message handling
+- **Key Features**:
+  - Real-time message reception and display
+  - WebSocket connection management
+  - Message status tracking
+  - Typing indicator handling
+- **Recent Updates**:
+  - **Status Parsing**: Updated to read `status` field from backend messages instead of hardcoding
+  - **Message Echo**: Enhanced to use backend-provided status for own messages
+  - **Translation Integration**: Proper handling of translated content from backend
 
-- **Framework:** React (with hooks and functional components)  
-- **Styling:** CSS Modules or styled-components for scoped styling  
-- **State Management:** React Context API or Redux Toolkit for global state  
-- **Networking:** Native WebSocket API for real-time communication  
-- **Build Tool:** Vite or Create React App (CRA) for fast builds and hot reload  
-- **Testing:** Vitest with React Testing Library and jsdom  
+### 2. Message Bubble (`src/components/chat/MessageBubble.tsx`)
+- **Purpose**: Individual message rendering with translation support
+- **Key Features**:
+  - Conditional content display (original vs translated)
+  - Status icon display
+  - User-specific message styling
+- **Recent Updates**:
+  - **Translation Display**: Shows only translated content for other users when available
+  - **Status Indicators**: Removed "Translating..." and "Translation failed" UI elements
+  - **Clean Interface**: Simplified message display without redundant information
 
----
+### 3. Input Bar (`src/components/chat/InputBar.tsx`)
+- **Purpose**: Message input and sending functionality
+- **Key Features**:
+  - Text input with send button
+  - Voice message support
+  - Typing indicator management
+- **Recent Updates**:
+  - Enhanced typing indicator coordination with backend
+  - Improved message sending flow
 
-## Architecture & Component Structure
+### 4. User Onboarding (`src/components/onboarding/UserOnboarding.tsx`)
+- **Purpose**: User setup and language preference selection
+- **Key Features**:
+  - Language preference selection
+  - Display name configuration
+  - Room joining functionality
+- **Recent Updates**:
+  - Improved language preference handling
+  - Enhanced user experience flow
 
-- **Single-Page Application (SPA):**  
-  Use React Router for route management, with a dynamic route for chat rooms (e.g., `/chat/:roomID`).
+## Message Flow Architecture
 
-- **Component Breakdown:**  
-  - **App:** Root component managing routing and context providers.  
-  - **RoomJoin:** Component to enter or generate a chat room link.  
-  - **ChatWindow:** Displays messages and controls message sending with voice message support. Manages connected user tracking excluding the current user for accurate user count display. Implements optimized message handling with proper deduplication for echoed messages and server timestamp synchronization. Handles comprehensive WebSocket message types including user join/leave notifications, system messages, error handling, and message delivery confirmations.  
-  - **MessageBubble:** Renders individual text and voice messages with integrated audio playback controls, message status indicators, and retry functionality for failed messages.  
-  - **InputBar:** Text input box and voice recording with MediaRecorder API integration.  
-  - **TypingIndicator:** Shows when other users are typing with standardized user identification.  
-  - **LanguageSelector:** Allows users to choose preferred language(s).  
-  - **ProgressIndicator:** Shows transcription/translation/TTS progress.  
-  - **ConfigTest:** Development component for testing and displaying configuration values.  
+### Translation Display Flow (Updated)
+1. **Message Reception**: WebSocket receives message from backend
+2. **Content Analysis**: Check if `translated_content` is available and `translation_status` is 'completed'
+3. **Display Logic**:
+   - **Current User**: Always show original text
+   - **Other Users**: Show translated content if available, otherwise show original
+4. **Status Display**: Show appropriate delivery status icon based on backend status
 
-- **Hooks:**  
-  - Custom hooks for WebSocket connection and message handling (e.g., `useWebSocket`) with binary message support.  
-  - Built-in MediaRecorder API integration within InputBar component for voice recording.  
+### Status Management Flow (Updated)
+1. **Backend Status**: Receive `status` field from backend messages
+2. **Status Parsing**: Parse status as "sending" | "sent" | "delivered" | "failed" | "read"
+3. **Icon Display**: Show appropriate icon based on status
+4. **Own Messages**: Update echoed messages with backend-provided status
 
----
+## Data Models
 
-## Coding Standards & Best Practices
+### Message Interface
+```typescript
+interface Message {
+  id: string;
+  from: string;
+  text: string;
+  timestamp: string;
+  status: "sending" | "sent" | "delivered" | "failed" | "read";
+  translated_content?: string;
+  translation_status?: "pending" | "processing" | "completed" | "failed";
+  translation_error?: string;
+  target_language?: string;
+}
+```
 
-- **Functional Components:** Prefer React functional components with hooks.  
-- **Reusable Components:** Build components to be reusable, composable, and unit testable.  
-- **Type Safety:** Use TypeScript for typesafety wherever possible.  
-- **Accessibility:**  
-  - Use semantic HTML elements.  
-  - Keyboard navigable UI controls.  
-  - Proper ARIA attributes for dynamic content and audio controls.  
-- **State Management:**  
-  - Use Context or Redux to store global states such as user language preference and WebSocket connection status.  
-  - Local component state only for transient UI state.  
-- **Error Handling:** Gracefully handle network errors or API failures with user-friendly messages, retry options, and visual status indicators for message delivery states.  
-- **Performance:**  
-  - Virtualize long message lists with libraries like `react-window`.  
-  - Debounce rapid input events if applicable.  
-  - Lazy load translation or audio playback components.  
+### WebSocket Message Types
+- **Text Messages**: Regular chat messages with translation support
+- **Voice Messages**: Audio messages with transcription
+- **Typing Messages**: Real-time typing indicators
+- **Status Messages**: Connection and delivery status updates
 
----
+## Translation Integration
 
-## User Experience (UX)
+### Translation Display Logic
+```typescript
+// For other users' messages
+{isCurrentUser ? (
+  <p className="text-sm">{regularMessage.text}</p>
+) : (
+  <p className="text-sm">
+    {regularMessage.translated_content && regularMessage.translation_status === 'completed'
+      ? regularMessage.translated_content
+      : regularMessage.text}
+  </p>
+)}
+```
 
-- **Onboarding:**  
-  - Show language selection dropdown at first room join.  
-  - Provide clear instructions for voice message recording and playback.
+### Translation Status Handling
+- **Completed**: Display translated content
+- **Failed/Pending**: Display original content
+- **No Translation**: Display original content
 
-- **Messaging:**  
-  - Show timestamps for messages.  
-  - Distinguish between original and translated messages visually (different bubbles or colors).  
-  - Support inline playback and pause of voice messages.  
-  - Display message delivery status with visual indicators (sending, sent, delivered, failed, read).
-  - Provide retry functionality for failed messages with clear error states.
-  - Show live status ("Transcribing...", "Translating...", "Synthesizing...") in the UI.
+## Status Icon System
 
-- **Mobile Responsiveness:**  
-  - Ensure chat UI is responsive and touch-friendly.  
-  - Optimize for both portrait and landscape views.
+### Status Icons
+- **Sending**: Clock icon (⏰)
+- **Sent**: Single checkmark (✓)
+- **Delivered**: Double checkmark (✓✓)
+- **Failed**: Error icon (❌)
+- **Read**: Blue double checkmark (✓✓)
 
----
+### Status Flow
+1. **Message Sent**: Initially "sending"
+2. **Backend Confirmation**: Updated to "delivered" by backend
+3. **Frontend Display**: Shows appropriate icon based on status
 
 ## WebSocket Integration
 
-- Maintain a single WebSocket connection per chat room session with binary message support.  
-- Use JSON message format with clear types (e.g., text, voice, typing, user_join, user_leave, error).  
-- Support binary WebSocket messages for efficient voice data transmission.  
-- Implement message tracking with unique IDs and delivery status updates.
-- Use standardized `user_id` field for consistent user identification across all message types.
-- Manage reconnection logic and show connection status to users.  
-- Handle both JSON-encoded audio data and binary audio data formats.
-- Provide retry mechanisms for failed message delivery.
-- **Message Deduplication**: Distinguish between new messages from other users and server-echoed messages to prevent duplicate display.
-- **Server Timestamp Synchronization**: Update local message timestamps with authoritative server timestamps when messages are confirmed.  
+### Connection Management
+- **Automatic Reconnection**: Handles connection drops gracefully
+- **Error Handling**: Displays connection status to users
+- **Message Queuing**: Handles message sending during reconnection
 
----
-
-## Audio Recording & Playback
-
-- **MediaRecorder API**: Capture voice messages in WebM format with Opus codec for optimal compression and quality
-- **Recording Feedback**: Visual indicators including recording status, animated recording indicator, and error messages
-- **Audio Quality**: Configure MediaRecorder with echo cancellation, noise suppression, and 44.1kHz sample rate
-- **Playback Controls**: Integrated audio player with play/pause, progress bar, and time display
-- **Error Handling**: Comprehensive error handling for microphone permissions, browser support, and audio failures
-- **Binary WebSocket Support**: Efficient transmission of audio data via WebSocket binary messages
-- **Audio Management**: Proper cleanup of audio URLs and event listeners to prevent memory leaks  
-
----
-
-## Internationalization (i18n)
-
-- Use libraries like `react-i18next` or equivalent.  
-- Dynamically update UI text based on user language selection.  
-- Properly format timestamps and dates per locale.
-
----
-
-## Configuration Management
-
-- **Environment Variables:** Use Vite's `VITE_` prefixed environment variables for configuration.
-- **Configuration Module:** Centralized configuration in `src/lib/config.ts` with validation and fallbacks.
-- **Development Testing:** Use the `ConfigTest` component to verify configuration values during development.
-- **WebSocket URLs:** Dynamic URL generation for room-specific WebSocket connections.
-- **Debug Logging:** Configurable debug logging with automatic enablement in development mode.
-
-### Configuration Testing
-
-The `ConfigTest` component (`src/components/test/ConfigTest.tsx`) provides a visual interface for developers to:
-- Verify environment variable loading
-- Test WebSocket URL generation
-- Check API endpoint construction
-- Validate configuration values
-- Debug connection settings
-
-To use the ConfigTest component during development:
-```tsx
-import { ConfigTest } from '@/components/test/ConfigTest';
-
-// Add to any development page or component
-<ConfigTest />
+### Message Handling
+```typescript
+const handleWebSocketMessage = (data: any) => {
+  const message: Message = {
+    // ... other fields
+    status: (typeof data.status === 'string' ? data.status as "sending" | "sent" | "delivered" | "failed" | "read" : 'sent'),
+    // ... translation fields
+  };
+};
 ```
 
-## Testing Guidelines
+## UI/UX Enhancements
 
-### Test Framework Setup
-- **Vitest:** Fast unit testing framework with native ES modules support
-- **React Testing Library:** Component testing with user-centric approach
-- **jsdom:** DOM simulation for browser environment testing
-- **Jest DOM:** Additional matchers for DOM assertions
+### Translation Experience
+- **Seamless Display**: Users see only translated content without UI clutter
+- **No Status Indicators**: Removed "Translating..." messages for cleaner experience
+- **Immediate Display**: Translated messages appear directly without intermediate states
 
-### Testing Structure
-```
-src/
-├── components/
-│   └── chat/
-│       ├── __tests__/
-│       │   └── ChatWindow.test.tsx    # Component tests
-│       └── ChatWindow.tsx
-└── test/
-    └── setup.ts                       # Global test configuration
-```
+### Message Status Experience
+- **Accurate Icons**: Status icons reflect actual message delivery state
+- **Consistent Display**: All messages show appropriate delivery status
+- **Real-time Updates**: Status updates happen immediately upon backend confirmation
 
-### Testing Best Practices
-- **Component Testing:** Write unit tests for components and hooks using React Testing Library
-- **Integration Testing:** Perform integration tests simulating full chat flows with WebSocket mocking
-- **Mocking Strategy:** Use Vitest mocks for WebSocket connections, AI service calls, and child components
-- **User-Centric Testing:** Test user interactions and behaviors rather than implementation details
-- **Accessibility Testing:** Include accessibility checks in component tests
-- **Configuration Testing:** Use the ConfigTest component to verify configuration during development
+## Error Handling
 
-### Current Test Coverage
-- **ChatWindow Component:** Comprehensive tests for user notifications, join/leave events, user count display (excluding current user)
-- **WebSocket Integration:** Mocked WebSocket behavior for testing message handling
-- **Multi-user Scenarios:** Tests for multiple users joining and leaving chat rooms
+### Connection Errors
+- **Reconnection Logic**: Automatic retry with exponential backoff
+- **User Feedback**: Clear status messages for connection issues
+- **Graceful Degradation**: Continue functioning with limited features
 
-### Running Tests
+### Translation Errors
+- **Fallback Display**: Show original message if translation fails
+- **No Error UI**: Don't display translation errors to users
+- **Silent Recovery**: Continue normal chat flow
+
+## Performance Optimizations
+
+### Message Rendering
+- **Virtual Scrolling**: Efficient rendering of large message lists
+- **Memoization**: Prevent unnecessary re-renders
+- **Lazy Loading**: Load older messages on demand
+
+### WebSocket Optimization
+- **Message Batching**: Group multiple messages when possible
+- **Connection Pooling**: Efficient WebSocket connection management
+- **Memory Management**: Clean up disconnected users and old messages
+
+## Recent Bug Fixes
+
+### Translation Display Issues (Resolved)
+- **Duplicate Messages**: Fixed by showing only translated content for other users
+- **Status Indicators**: Removed "Translating..." and "Translation failed" UI elements
+- **Clean Interface**: Users now see only the translated message without original text
+
+### Status Icon Issues (Resolved)
+- **Incorrect Icons**: Fixed by reading status from backend instead of hardcoding
+- **Own Messages**: Updated to use backend-provided status for echoed messages
+- **Delivery Confirmation**: Messages now show correct delivery status icons
+
+### Typing Indicator Issues (Resolved)
+- **Interference**: Backend now prevents typing messages during translation
+- **Clean Display**: No more typing indicators interfering with translated messages
+- **Proper Timing**: Typing indicators work correctly with translation flow
+
+## Testing
+
+### Component Testing
+- **Unit Tests**: Individual component testing with React Testing Library
+- **Integration Tests**: End-to-end message flow testing
+- **Translation Tests**: Multi-language display verification
+
+### Test Files Location
+All test files are located in `src/components/chat/__tests__/` directory.
+
+## Development Setup
+
+### Prerequisites
+- Node.js 18+ and npm/yarn
+- Backend server running on configured port
+
+### Installation
 ```bash
-npm run test        # Watch mode for development
-npm run test:run    # Single run for CI/production
+cd front-end
+npm install
+npm run dev
 ```
 
----
+### Environment Configuration
+- **WebSocket URL**: Configure backend WebSocket endpoint
+- **Translation Support**: Ensure backend translation service is running
+- **CORS**: Backend must allow frontend origin
 
-## Code Review & Collaboration
+## Build and Deployment
 
-- Write clear, descriptive commit messages.  
-- Use Pull Requests for code review with checklist for standards compliance.  
-- Document components and hooks with comments and usage instructions.  
+### Development Build
+```bash
+npm run build
+npm run preview
+```
 
----
-
-Following these guidelines will help build a robust, maintainable, and user-friendly frontend for the multilingual voice and text chat application.
+### Production Considerations
+- **Environment Variables**: Configure production WebSocket endpoints
+- **Error Monitoring**: Implement proper error tracking
+- **Performance Monitoring**: Track message delivery and translation success rates
 
