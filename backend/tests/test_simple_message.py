@@ -8,10 +8,12 @@ import json
 import websockets
 import sys
 import os
+import pytest
 
 # Add the current directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+@pytest.mark.asyncio
 async def test_simple_message():
     """Test basic message functionality"""
     print("🧪 Testing Basic Message Functionality")
@@ -50,19 +52,28 @@ async def test_simple_message():
                 except asyncio.TimeoutError:
                     break
             
-            # Check responses
+            # Check responses and track expected types
+            text_message_found = False
+            confirmation_message_found = False
+            
             for response in responses:
                 try:
                     response_data = json.loads(response)
                     print(f"📊 Response type: {response_data.get('type')}")
                     if response_data.get("type") == "text":
                         print("✅ Text message received successfully")
+                        text_message_found = True
                     elif response_data.get("type") == "message_confirmation":
                         status = response_data.get("status", "unknown")
                         print(f"📊 Message confirmation status: {status}")
+                        confirmation_message_found = True
                         
                 except json.JSONDecodeError:
                     print(f"⚠️  Non-JSON response: {response}")
+            
+            # Assert expected message types are present
+            assert text_message_found, "Expected at least one text message response"
+            assert confirmation_message_found, "Expected at least one message confirmation response"
                 
     except Exception as e:
         print(f"❌ Error during test: {e}")

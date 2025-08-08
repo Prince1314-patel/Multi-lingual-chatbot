@@ -37,7 +37,7 @@ async def test_translation_with_two_users():
             print(f"📨 User1 received: {response1}")
             
             # Connect second user
-            uri2 = "ws://localhost:8000/ws/chat/test_room?user_id=user2&display_name=User2&preferred_language=es"
+            uri2 = "ws://localhost:8000/ws/chat/test_room?user_id=user2&display_name=User2&preferred_language=en"
             print(f"🔌 Connecting user2: {uri2}")
             
             async with websockets.connect(uri2) as websocket2:
@@ -104,6 +104,7 @@ async def test_translation_with_two_users():
                 
                 if not translation_found:
                     print("❌ No translation found in any response")
+                    return False
                 
     except Exception as e:
         print(f"❌ Error during test: {e}")
