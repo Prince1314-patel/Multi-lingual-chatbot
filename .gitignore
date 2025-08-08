@@ -8,6 +8,7 @@ lerna-debug.log*
 
 .kiro
 .kiro/
+htmlcov/
 
 # Frontend Build Outputs
 front-end/dist/
