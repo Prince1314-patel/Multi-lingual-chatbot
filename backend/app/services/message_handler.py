@@ -249,7 +249,6 @@ class MessageHandler:
                     for user_id, user_connection in connections.items():
                         if user_id != connection.user_id:  # Skip sender
                             if (user_connection.preferred_language and 
-                                sender_preferred_lang and
                                 user_connection.preferred_language != sender_preferred_lang):
                                 needs_translation = True
                                 logger.info(f"🔄 Translation needed: sender prefers {sender_preferred_lang}, user {user_id} prefers {user_connection.preferred_language}")
@@ -445,7 +444,8 @@ class MessageHandler:
                     typing_message = TypingMessage(
                         user_id=connection.user_id,
                         room_id=connection.room_id,
-                        isTyping=False
+                        isTyping=False,
+                        timestamp=get_current_time()
                     )
                     
                     await self.connection_manager.broadcast_to_room(
@@ -496,7 +496,8 @@ class MessageHandler:
                 typing_message = TypingMessage(
                     user_id=user_id,
                     room_id=room_id,
-                    isTyping=False
+                    isTyping=False,
+                    timestamp=get_current_time()
                 )
                 
                 await self.connection_manager.broadcast_to_room(
